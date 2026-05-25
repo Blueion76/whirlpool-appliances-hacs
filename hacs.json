@@ -1,0 +1,14 @@
+{
+  "name": "Whirlpool Appliances",
+  "render_readme": true,
+  "homeassistant": "2026.5.0",
+  "domains": [
+    "sensor",
+    "binary_sensor",
+    "button",
+    "switch",
+    "number",
+    "select",
+    "light"
+  ]
+}
