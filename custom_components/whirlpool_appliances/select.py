@@ -14,7 +14,8 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import WhirlpoolApkConfigEntry
 from .const import DOMAIN
-from .api import appliance_said
+from .capabilities import cooking_cavity_capability
+from .api import appliance_ddm_key, appliance_said
 from .entity import WhirlpoolApkEntity, attr_value, entity_name_from_key, find_key, is_cooking_appliance, is_refrigerator_appliance, oven_cavity_exists
 from .oven_options import FROZEN_BAKE_FOOD_OPTIONS, current_oven_options, local_options, minutes_to_seconds, oven_is_active, update_local_options
 
@@ -79,6 +80,68 @@ def _supported_oven_mode_options(appliance: Mapping[str, Any]) -> list[str]:
     if ddm and ddm in LIMITED_OVEN_MODE_OPTIONS_BY_DDM:
         return LIMITED_OVEN_MODE_OPTIONS_BY_DDM[ddm]
     return OVEN_MODE_OPTIONS
+
+
+def _parsed_ddm_for_appliance(coordinator, appliance: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    data = coordinator.data or {}
+    ddm_key = appliance_ddm_key(appliance) or _appliance_field(appliance, "DATA_MODEL_KEY", "dataModelKey", "ddmKey")
+    capabilities = data.get("ddm_capabilities") or {}
+    if ddm_key and isinstance(capabilities.get(ddm_key), Mapping):
+        parsed = capabilities[ddm_key].get("parsed")
+        if isinstance(parsed, Mapping):
+            return parsed
+
+    said = appliance_said(appliance)
+    if said:
+        for entry in capabilities.values():
+            if not isinstance(entry, Mapping):
+                continue
+            metadata = entry.get("metadata") or {}
+            if said in (metadata.get("appliance_saids") or []):
+                parsed = entry.get("parsed")
+                if isinstance(parsed, Mapping):
+                    return parsed
+    return None
+
+
+def _frozen_bake_defaults(coordinator, appliance: Mapping[str, Any], cavity: str | None, food: str) -> dict[str, Any]:
+    """Return DDM default temp/minutes/complete-action for a Frozen Bake food."""
+    capability = cooking_cavity_capability(_parsed_ddm_for_appliance(coordinator, appliance), cavity)
+    if not isinstance(capability, Mapping):
+        return {}
+
+    frozen = capability.get("frozen_bake")
+    food_by_name = frozen.get("food_by_name") if isinstance(frozen, Mapping) else None
+    details = food_by_name.get(food) if isinstance(food_by_name, Mapping) else None
+    if not isinstance(details, Mapping):
+        return {}
+
+    updates: dict[str, Any] = {}
+    target = details.get("target_temperature")
+    if isinstance(target, Mapping) and target.get("default_c") is not None:
+        updates["target_temp"] = float(target["default_c"])
+
+    cook_time = details.get("cook_time")
+    if isinstance(cook_time, Mapping):
+        default = cook_time.get("default")
+        if default is not None:
+            try:
+                minutes = float(default) / 60
+                updates["cook_time_minutes"] = int(minutes) if minutes.is_integer() else round(minutes, 1)
+            except (TypeError, ValueError):
+                pass
+
+    complete = details.get("cook_time_complete_action")
+    if isinstance(complete, Mapping):
+        default = str(complete.get("default") or "")
+        if default == "1":
+            updates["complete_action"] = "stay_on"
+        elif default == "2":
+            updates["complete_action"] = "keep_warm"
+        elif default == "3":
+            updates["complete_action"] = "turn_off"
+
+    return updates
 
 
 def _cavity_prefix(cavity: str | None) -> str:
@@ -294,12 +357,23 @@ class WhirlpoolFrozenBakePresetSelect(WhirlpoolApkEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         if option not in FROZEN_BAKE_FOOD_OPTIONS:
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
-        update_local_options(
-            self.coordinator,
-            self.said,
-            self.cavity,
-            frozen_food=None if option == "None" else option.lower().replace(" ", "_"),
-        )
+
+        if option == "None":
+            update_local_options(self.coordinator, self.said, self.cavity, frozen_food=None)
+        else:
+            food = option.lower().replace(" ", "_")
+            updates = _frozen_bake_defaults(self.coordinator, self.appliance, self.cavity, food)
+            update_local_options(
+                self.coordinator,
+                self.said,
+                self.cavity,
+                frozen_food=food,
+                **updates,
+            )
+
+        # Notify the related number/select entities so the default temperature,
+        # cook time, and complete action display immediately after choosing a preset.
+        self.coordinator.async_update_listeners()
         self.async_write_ha_state()
 
 
