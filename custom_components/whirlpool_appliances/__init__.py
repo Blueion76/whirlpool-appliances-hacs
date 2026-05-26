@@ -155,6 +155,15 @@ def _service_result(result: Any) -> dict[str, Any]:
     return {"result": result}
 
 
+def _service_bool(call: ServiceCall, key: str = "enabled") -> bool:
+    """Return a service boolean, accepting legacy 'on' for YAML/backward compatibility."""
+    if key in call.data:
+        return bool(call.data[key])
+    if "on" in call.data:
+        return bool(_service_bool(call))
+    raise HomeAssistantError(f"Missing required boolean field: {key}")
+
+
 def _register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, "call_api"):
         return
@@ -185,7 +194,7 @@ def _register_services(hass: HomeAssistant) -> None:
 
     async def set_cavity_light(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.set_cavity_light(_service_said(hass, call), call.data["on"], call.data.get("cavity"))
+        result = await client.set_cavity_light(_service_said(hass, call), _service_bool(call), call.data.get("cavity"))
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
@@ -229,13 +238,13 @@ def _register_services(hass: HomeAssistant) -> None:
 
     async def set_quiet_mode(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.set_quiet_mode(_service_said(hass, call), call.data["on"])
+        result = await client.set_quiet_mode(_service_said(hass, call), _service_bool(call))
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
     async def set_remote_enable(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.set_remote_enable(_service_said(hass, call), call.data["on"])
+        result = await client.set_remote_enable(_service_said(hass, call), _service_bool(call))
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
@@ -313,7 +322,7 @@ def _register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "set_cavity_light",
         set_cavity_light,
-        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Required("on"): bool, vol.Optional("cavity"): str}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Required("enabled"): bool, vol.Optional("on"): bool, vol.Optional("cavity"): str}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
@@ -375,14 +384,14 @@ def _register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "set_quiet_mode",
         set_quiet_mode,
-        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Required("on"): bool}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Required("enabled"): bool, vol.Optional("on"): bool}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "set_remote_enable",
         set_remote_enable,
-        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Required("on"): bool}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Required("enabled"): bool, vol.Optional("on"): bool}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
