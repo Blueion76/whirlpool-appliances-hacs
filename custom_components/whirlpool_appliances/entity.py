@@ -482,11 +482,13 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
         """Return true if the latest status says remote control is disabled."""
         raw = attr_value(
             self.flat_status,
-            "XCat_RemoteSetRemoteControlEnable",
-            "XCat_RemoteControlEnable",
-            "remoteControlEnable",
-            "remoteEnable",
-            "remoteEnabled",
+            (
+                "XCat_RemoteSetRemoteControlEnable",
+                "XCat_RemoteControlEnable",
+                "remoteControlEnable",
+                "remoteEnable",
+                "remoteEnabled",
+            ),
         )
         if raw is None:
             return False
