@@ -26,6 +26,14 @@ PRESET_TO_SERVICE_MODE = {
     "Air Fry": "air_fry",
     "Sabbath Bake": "sabbath_bake",
 }
+FROZEN_BAKE_ENUM_TO_FOOD = {
+    "FrozenBakeFoodMeals": "meals",
+    "FrozenBakeFoodNuggets": "nuggets",
+    "FrozenBakeFoodLasagna": "lasagna",
+    "FrozenBakeFoodPizza": "pizza",
+    "FrozenBakeFoodPie": "pie",
+    "FrozenBakeFoodFries": "fries",
+}
 
 
 def _walk(value: Any, *, path: str = "") -> list[tuple[str, Any]]:
@@ -206,6 +214,84 @@ def _range_summary(raw: Mapping[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+def _extract_frozen_bake(
+    set_cycle: Mapping[str, Any],
+    capability_data: Mapping[str, Any],
+    attr_map: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Extract Frozen Bake food modes and ranges from DDM personality."""
+    automatic = set_cycle.get("homeAutomaticOven")
+    if not isinstance(automatic, Mapping):
+        return {"foods": [], "food_by_name": {}}
+
+    foods: list[dict[str, Any]] = []
+    for food_key, food_payload in automatic.items():
+        if not isinstance(food_payload, Mapping):
+            continue
+        attrs = food_payload.get("Attributes")
+        if not isinstance(attrs, Mapping):
+            continue
+
+        food_attr = None
+        enum_value = None
+        for attr_name, values in attrs.items():
+            if "FrozenBakeFood" not in str(attr_name):
+                continue
+            food_attr = str(attr_name)
+            if isinstance(values, list) and values:
+                enum_value = str(values[0])
+            elif isinstance(values, str):
+                enum_value = values
+            break
+        if not food_attr or not enum_value:
+            continue
+
+        food = FROZEN_BAKE_ENUM_TO_FOOD.get(enum_value)
+        if not food:
+            continue
+
+        details = capability_data.get(food_key) if isinstance(capability_data.get(food_key), Mapping) else {}
+        required = details.get("Required") if isinstance(details, Mapping) else {}
+
+        temp_range = None
+        cook_time_range = None
+        complete_action = None
+        if isinstance(required, Mapping):
+            for req_attr, req_details in required.items():
+                if not isinstance(req_details, Mapping):
+                    continue
+                if "TargetTemp" in str(req_attr):
+                    temp_range = _temp_range_summary(req_details.get("TempRange"))
+                elif "CookTime" in str(req_attr):
+                    cook_time_range = _range_summary(req_details.get("Range"))
+                elif "CookTimeCompleteAction" in str(req_attr):
+                    complete_action = {
+                        "options": req_details.get("Enumeration"),
+                        "default": req_details.get("Default"),
+                    }
+
+        foods.append(
+            {
+                "food": food,
+                "food_key": food_key,
+                "food_attribute": food_attr,
+                "enum_value": enum_value,
+                "code": _enum_code_for_value(attr_map, food_attr, enum_value),
+                "name": food_payload.get("Name"),
+                "target_temperature": temp_range,
+                "cook_time": cook_time_range,
+                "cook_time_complete_action": complete_action,
+            }
+        )
+
+    order = {"pizza": 0, "pie": 1, "meals": 2, "fries": 3, "nuggets": 4, "lasagna": 5}
+    foods.sort(key=lambda item: order.get(str(item.get("food")), 50))
+    return {
+        "foods": foods,
+        "food_by_name": {str(item["food"]): item for item in foods if item.get("food")},
+    }
+
+
 def _extract_cooking_capabilities(documents: list[Mapping[str, Any]], attr_map: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
     """Extract app-visible oven modes and per-mode ranges from DDM personality."""
     cooking: dict[str, Any] = {"cavities": {}}
@@ -325,6 +411,8 @@ def _extract_cooking_capabilities(documents: list[Mapping[str, Any]], attr_map: 
                             default_preset = mode.get("preset")
                             break
 
+                frozen_bake = _extract_frozen_bake(set_cycle, capability_data, attr_map)
+
                 cooking["cavities"][str(cavity_key)] = {
                     "supported_presets": [str(mode["preset"]) for mode in modes],
                     "supported_service_modes": [str(mode["service_mode"]) for mode in modes if mode.get("service_mode")],
@@ -336,6 +424,7 @@ def _extract_cooking_capabilities(documents: list[Mapping[str, Any]], attr_map: 
                     "mode_by_preset": {str(mode["preset"]): mode for mode in modes},
                     "default_preset": default_preset,
                     "modes": modes,
+                    "frozen_bake": frozen_bake,
                 }
 
     return cooking
