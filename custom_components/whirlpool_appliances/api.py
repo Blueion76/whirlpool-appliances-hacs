@@ -706,19 +706,21 @@ class WhirlpoolCloudClient:
         )
 
     async def set_oven_cook(
-        self, said: str, temperature: float, mode: str = "bake", cavity: str | None = None
+        self,
+        said: str,
+        temperature: float,
+        mode: str = "bake",
+        cavity: str | None = None,
+        *,
+        cook_time_seconds: int | None = None,
+        delay_time_seconds: int | None = None,
+        complete_action: str = "turn_off",
     ) -> Any:
         """Start/modify a Whirlpool legacy oven cavity cook cycle.
 
-        Captured Whirlpool Android app payload for Bake:
-          OvenUpperCavity_CycleSetCommonMode: "2"
-          OvenUpperCavity_CycleSetTargetTemp: "1766"
-          OvenUpperCavity_OpSetCookTimeCompleteAction: "3"
-          OvenUpperCavity_OpSetOperations: "2"
-
-        This WOC54EC0HS00/Minerva combo oven accepts OpSetOperations "2"
-        for remote starts. Keep the app-observed CookTimeCompleteAction "3"
-        but use the known-working operation value "2".
+        Temperature is Celsius and is converted to Whirlpool tenths-of-Celsius.
+        Optional cook time, delay time, and completion action are sourced from
+        the DDM CapabilityData when available.
         """
         prefix = self._cavity_prefix(cavity)
         mode_map = {
@@ -734,16 +736,78 @@ class WhirlpoolCloudClient:
             "keep_warm": "24",
             "air_fry": "41",
         }
+        complete_action_map = {
+            "stay_on": "1",
+            "stayon": "1",
+            "keep_warm": "2",
+            "keepwarm": "2",
+            "turn_off": "3",
+            "turnoff": "3",
+        }
         selected = mode_map.get(str(mode).lower())
         if selected is None:
             raise WhirlpoolApiError(f"Unsupported oven cook mode: {mode}")
 
+        complete = complete_action_map.get(str(complete_action or "turn_off").lower())
+        if complete is None:
+            raise WhirlpoolApiError(f"Unsupported oven cook time complete action: {complete_action}")
+
+        attrs = {
+            f"{prefix}_CycleSetCommonMode": selected,
+            f"{prefix}_CycleSetTargetTemp": str(int(round(float(temperature) * 10))),
+            f"{prefix}_OpSetCookTimeCompleteAction": complete,
+            f"{prefix}_OpSetOperations": "2",
+        }
+        if cook_time_seconds is not None:
+            attrs[f"{prefix}_TimeSetCookTimeSet"] = str(max(0, int(cook_time_seconds)))
+        if delay_time_seconds is not None:
+            attrs[f"{prefix}_TimeSetDelayTime"] = str(max(0, int(delay_time_seconds)))
+
+        return await self.send_attributes(said, attrs)
+
+    async def set_oven_frozen_bake(
+        self,
+        said: str,
+        food: str,
+        temperature: float,
+        cook_time_seconds: int,
+        cavity: str | None = None,
+        *,
+        complete_action: str = "turn_off",
+    ) -> Any:
+        """Start a Whirlpool Frozen Bake automatic oven cycle."""
+        prefix = self._cavity_prefix(cavity)
+        food_map = {
+            "meals": "2",
+            "nuggets": "3",
+            "lasagna": "4",
+            "pizza": "5",
+            "pie": "6",
+            "fries": "7",
+        }
+        complete_action_map = {
+            "stay_on": "1",
+            "stayon": "1",
+            "keep_warm": "2",
+            "keepwarm": "2",
+            "turn_off": "3",
+            "turnoff": "3",
+        }
+        selected_food = food_map.get(str(food).lower())
+        if selected_food is None:
+            raise WhirlpoolApiError(f"Unsupported Frozen Bake food: {food}")
+
+        complete = complete_action_map.get(str(complete_action or "turn_off").lower())
+        if complete is None:
+            raise WhirlpoolApiError(f"Unsupported oven cook time complete action: {complete_action}")
+
         return await self.send_attributes(
             said,
             {
-                f"{prefix}_CycleSetCommonMode": selected,
-                f"{prefix}_CycleSetTargetTemp": str(int(float(temperature) * 10)),
-                f"{prefix}_OpSetCookTimeCompleteAction": "3",
+                f"{prefix}_CycleSetFrozenBakeFood": selected_food,
+                f"{prefix}_CycleSetTargetTemp": str(int(round(float(temperature) * 10))),
+                f"{prefix}_TimeSetCookTimeSet": str(max(0, int(cook_time_seconds))),
+                f"{prefix}_OpSetCookTimeCompleteAction": complete,
                 f"{prefix}_OpSetOperations": "2",
             },
         )
