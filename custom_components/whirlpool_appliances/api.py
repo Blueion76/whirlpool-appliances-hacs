@@ -14,6 +14,8 @@ from typing import Any
 
 from aiohttp import ClientError, ClientResponse, ClientSession
 
+from .logging_utils import summarize, summarize_keys
+
 from .const import (
     AWS_REGIONS,
     BASE_URLS,
@@ -335,6 +337,16 @@ class WhirlpoolCloudClient:
             await self.ensure_auth_valid()
         url = path if path.startswith("http") else f"{self.base_url}/{path.lstrip('/')}"
         headers = self._headers(auth=auth, extra=extra_headers)
+        safe_path = path if path.startswith("/") else url.split(self.base_url, 1)[-1] or path
+        _LOGGER.debug(
+            "Whirlpool API request: method=%s path=%s auth=%s params=%s json=%s data=%s",
+            method.upper(),
+            safe_path,
+            auth,
+            summarize(params),
+            summarize(json),
+            summarize(data),
+        )
         try:
             async with self.session.request(
                 method.upper(),
@@ -345,26 +357,53 @@ class WhirlpoolCloudClient:
                 headers=headers,
                 timeout=30,
             ) as resp:
-                return await self._decode_response(resp)
+                result = await self._decode_response(resp)
+                _LOGGER.debug(
+                    "Whirlpool API response: method=%s path=%s status=%s payload=%s",
+                    method.upper(),
+                    safe_path,
+                    resp.status,
+                    summarize_keys(result),
+                )
+                _LOGGER.debug(
+                    "Whirlpool API response payload preview: method=%s path=%s payload=%s",
+                    method.upper(),
+                    safe_path,
+                    summarize(result),
+                )
+                return result
         except ClientError as err:
+            _LOGGER.warning("Whirlpool API transport error: method=%s path=%s error=%s", method.upper(), safe_path, err)
             raise WhirlpoolApiError(str(err)) from err
 
     async def _decode_response(self, resp: ClientResponse) -> Any:
         text = await resp.text()
         if resp.status in (401, 403):
+            _LOGGER.warning(
+                "Whirlpool API auth/error response: status=%s url=%s body=%s",
+                resp.status,
+                resp.url.path,
+                summarize(text),
+            )
             # Some Whirlpool endpoints legitimately reject certain appliance generations
             # (for example legacy REST calls against TS_SAID devices). Do not erase a
             # valid OAuth token here; callers decide whether the failed endpoint was
             # required or optional.
             raise WhirlpoolAuthError(f"HTTP {resp.status}: {text[:500]}")
         if resp.status >= 400:
+            _LOGGER.warning(
+                "Whirlpool API error response: status=%s url=%s body=%s",
+                resp.status,
+                resp.url.path,
+                summarize(text),
+            )
             raise WhirlpoolApiError(f"HTTP {resp.status}: {text[:1000]}")
         content_type = resp.headers.get("Content-Type", "")
         if "json" in content_type.lower():
             try:
                 return await resp.json(content_type=None)
             except Exception:  # noqa: BLE001
-                pass
+                _LOGGER.debug("Whirlpool API response declared JSON but failed to decode: url=%s", resp.url.path)
         if not text:
             return None
         try:
@@ -659,7 +698,30 @@ class WhirlpoolCloudClient:
                 "header": {"said": said, "command": command or "setAttributes"},
                 "body": dict(attributes or {}),
             }
-        return await self.request("POST", "/api/v1/appliance/command", json=payload)
+        _LOGGER.debug(
+            "Sending Whirlpool appliance command: said=%s command=%s body=%s raw=%s",
+            said,
+            command or "setAttributes",
+            summarize(payload.get("body")),
+            bool(raw),
+        )
+        result = await self.request("POST", "/api/v1/appliance/command", json=payload)
+        if self._command_rejected(result):
+            _LOGGER.warning(
+                "Whirlpool appliance command rejected: said=%s command=%s body=%s result=%s",
+                said,
+                command or "setAttributes",
+                summarize(payload.get("body")),
+                summarize(result),
+            )
+        else:
+            _LOGGER.debug(
+                "Whirlpool appliance command accepted: said=%s command=%s result=%s",
+                said,
+                command or "setAttributes",
+                summarize_keys(result),
+            )
+        return result
 
     async def send_attributes(self, said: str, attributes: Mapping[str, Any]) -> Any:
         """Set legacy SAID appliance attributes."""
@@ -758,6 +820,18 @@ class WhirlpoolCloudClient:
             f"{prefix}_OpSetCookTimeCompleteAction": complete,
             f"{prefix}_OpSetOperations": "2",
         }
+        _LOGGER.debug(
+            "Preparing Whirlpool oven cook command: said=%s cavity=%s mode=%s code=%s target_c=%s cook_time_seconds=%s delay_time_seconds=%s complete_action=%s code=%s",
+            said,
+            cavity or "upper",
+            mode,
+            selected,
+            temperature,
+            cook_time_seconds,
+            delay_time_seconds,
+            complete_action,
+            complete,
+        )
         if cook_time_seconds is not None:
             attrs[f"{prefix}_TimeSetCookTimeSet"] = str(max(0, int(cook_time_seconds)))
         if delay_time_seconds is not None:
@@ -801,16 +875,25 @@ class WhirlpoolCloudClient:
         if complete is None:
             raise WhirlpoolApiError(f"Unsupported oven cook time complete action: {complete_action}")
 
-        return await self.send_attributes(
+        attrs = {
+            f"{prefix}_CycleSetFrozenBakeFood": selected_food,
+            f"{prefix}_CycleSetTargetTemp": str(int(round(float(temperature) * 10))),
+            f"{prefix}_TimeSetCookTimeSet": str(max(0, int(cook_time_seconds))),
+            f"{prefix}_OpSetCookTimeCompleteAction": complete,
+            f"{prefix}_OpSetOperations": "2",
+        }
+        _LOGGER.debug(
+            "Preparing Whirlpool Frozen Bake command: said=%s cavity=%s food=%s code=%s target_c=%s cook_time_seconds=%s complete_action=%s code=%s",
             said,
-            {
-                f"{prefix}_CycleSetFrozenBakeFood": selected_food,
-                f"{prefix}_CycleSetTargetTemp": str(int(round(float(temperature) * 10))),
-                f"{prefix}_TimeSetCookTimeSet": str(max(0, int(cook_time_seconds))),
-                f"{prefix}_OpSetCookTimeCompleteAction": complete,
-                f"{prefix}_OpSetOperations": "2",
-            },
+            cavity or "upper",
+            food,
+            selected_food,
+            temperature,
+            cook_time_seconds,
+            complete_action,
+            complete,
         )
+        return await self.send_attributes(said, attrs)
 
     async def stop_oven_cavity(self, said: str, cavity: str | None = None) -> Any:
         prefix = self._cavity_prefix(cavity)

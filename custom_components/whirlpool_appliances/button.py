@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -15,6 +16,9 @@ from . import WhirlpoolApkConfigEntry
 from .api import appliance_said
 from .entity import WhirlpoolApkEntity, entity_name_from_key, is_cooking_appliance, microwave_exists, oven_cavity_exists
 from .oven_options import current_oven_options, minutes_to_seconds, oven_is_active
+from .logging_utils import summarize
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -133,7 +137,10 @@ class WhirlpoolApkButton(WhirlpoolApkEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         target = self.coordinator if self._use_coordinator else self.client
-        self._check_service_request(await self.entity_description.press_fn(target, self.said))
+        _LOGGER.debug("Pressing Whirlpool button: entity=%s said=%s key=%s", self.entity_id, self.said, self.entity_description.key)
+        result = await self.entity_description.press_fn(target, self.said)
+        _LOGGER.debug("Whirlpool button result: entity=%s key=%s result=%s", self.entity_id, self.entity_description.key, summarize(result))
+        self._check_service_request(result)
         await self.coordinator.async_request_refresh()
 
 
@@ -152,11 +159,15 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
             self._attr_name = "Start Oven"
 
     async def async_press(self) -> None:
-        self._check_service_request(await self.async_start_oven())
+        _LOGGER.debug("Pressing Whirlpool Start Oven button: entity=%s said=%s cavity=%s", self.entity_id, self.said, self.cavity)
+        result = await self.async_start_oven()
+        _LOGGER.debug("Whirlpool Start Oven result: entity=%s cavity=%s result=%s", self.entity_id, self.cavity, summarize(result))
+        self._check_service_request(result)
         await self.coordinator.async_request_refresh()
 
     async def async_start_oven(self) -> Any:
         options = current_oven_options(self.coordinator, self.said, self.cavity, self.flat_status)
+        _LOGGER.debug("Whirlpool Start Oven options: said=%s cavity=%s options=%s active=%s", self.said, self.cavity, summarize(options), oven_is_active(self.flat_status, self.cavity))
         if oven_is_active(self.flat_status, self.cavity):
             self._check_service_request(await self.client.stop_oven_cavity(self.said, self.cavity))
             await asyncio.sleep(1)

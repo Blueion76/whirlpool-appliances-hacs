@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .api import appliance_ddm_key, appliance_name, appliance_said
 from .const import DOMAIN
 from .coordinator import WhirlpoolApkCoordinator
+from .logging_utils import summarize
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -478,10 +479,15 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
             self._unavailable_logged = False
         return available
 
-    @staticmethod
-    def _check_service_request(result: Any) -> None:
+    def _check_service_request(self, result: Any) -> None:
         """Raise a Home Assistant error when a Whirlpool control request failed."""
         if result is False:
+            _LOGGER.warning(
+                "Whirlpool command failed: entity=%s said=%s result=False status_preview=%s",
+                self.entity_id,
+                self.said,
+                summarize(self.flat_status),
+            )
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="request_failed",
@@ -490,6 +496,13 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
             status = str(result.get("status", "")).strip().lower()
             message = str(result.get("message", "")).strip().lower()
             if status in {"error", "failed", "fail", "02", "2", "nack"} or "negative acknow" in message:
+                _LOGGER.warning(
+                    "Whirlpool command rejected: entity=%s said=%s result=%s status_preview=%s",
+                    self.entity_id,
+                    self.said,
+                    summarize(result),
+                    summarize(self.flat_status),
+                )
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key="request_failed",

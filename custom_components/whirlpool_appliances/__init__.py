@@ -28,6 +28,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import WhirlpoolApkCoordinator
+from .logging_utils import summarize
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,10 +69,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry)
         raise ConfigEntryNotReady(translation_domain=DOMAIN, translation_key="cannot_connect") from err
 
     coordinator = WhirlpoolApkCoordinator(hass, client, entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+    _LOGGER.debug(
+        "Setting up Whirlpool Appliances entry: entry_id=%s region=%s brand=%s scan_interval=%s",
+        entry.entry_id,
+        entry.data.get(CONF_REGION, DEFAULT_REGION),
+        entry.data.get(CONF_BRAND, DEFAULT_BRAND),
+        entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+    )
     entry.runtime_data = coordinator
     await coordinator.async_config_entry_first_refresh()
     if not (coordinator.data or {}).get("appliances"):
+        _LOGGER.warning("Whirlpool setup did not find any appliances")
         raise ConfigEntryNotReady(translation_domain=DOMAIN, translation_key="appliances_fetch_failed")
+    _LOGGER.debug("Whirlpool setup discovered appliances: %s", summarize((coordinator.data or {}).get("appliances")))
     await coordinator.async_start_push()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {DATA_CLIENT: client, DATA_COORDINATOR: coordinator}
 
@@ -135,12 +145,15 @@ def _service_said(hass: HomeAssistant, call: ServiceCall) -> str:
 
 def _service_result(result: Any) -> dict[str, Any]:
     if result is False:
+        _LOGGER.warning("Whirlpool service command failed with boolean False")
         raise HomeAssistantError(translation_domain=DOMAIN, translation_key="request_failed")
     if isinstance(result, dict):
         status = str(result.get("status", "")).strip().lower()
         message = str(result.get("message", "")).strip().lower()
         if status in {"error", "failed", "fail", "02", "2", "nack"} or "negative acknow" in message:
+            _LOGGER.warning("Whirlpool service command rejected: result=%s", summarize(result))
             raise HomeAssistantError(translation_domain=DOMAIN, translation_key="request_failed")
+    _LOGGER.debug("Whirlpool service command result accepted: %s", summarize(result))
     return {"result": result}
 
 def _service_bool(call: ServiceCall, key: str = "enabled") -> bool:
@@ -170,6 +183,7 @@ def _register_services(hass: HomeAssistant) -> None:
         return _service_result(result)
 
     async def send_command(call: ServiceCall) -> dict[str, Any]:
+        _LOGGER.debug("Whirlpool service send_appliance_command called: data=%s", summarize(dict(call.data)))
         client = _first_client(hass)
         result = await client.send_appliance_command(
             _service_said(hass, call),
@@ -196,12 +210,14 @@ def _register_services(hass: HomeAssistant) -> None:
         return _service_result(result)
 
     async def set_attributes(call: ServiceCall) -> dict[str, Any]:
+        _LOGGER.debug("Whirlpool service set_attributes called: data=%s", summarize(dict(call.data)))
         client = _first_client(hass)
         result = await client.send_attributes(_service_said(hass, call), call.data["attributes"])
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
     async def set_oven_cook(call: ServiceCall) -> dict[str, Any]:
+        _LOGGER.debug("Whirlpool service set_oven_cook called: data=%s", summarize(dict(call.data)))
         client = _first_client(hass)
         result = await client.set_oven_cook(
             _service_said(hass, call),
@@ -224,6 +240,7 @@ def _register_services(hass: HomeAssistant) -> None:
         return _service_result(result)
 
     async def set_oven_frozen_bake(call: ServiceCall) -> dict[str, Any]:
+        _LOGGER.debug("Whirlpool service set_oven_frozen_bake called: data=%s", summarize(dict(call.data)))
         client = _first_client(hass)
         result = await client.set_oven_frozen_bake(
             _service_said(hass, call),

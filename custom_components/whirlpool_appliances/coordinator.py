@@ -11,6 +11,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import WhirlpoolApiError, WhirlpoolCloudClient, appliance_ddm_key, appliance_said
 from .api_mqtt import WhirlpoolThingShieldManager
 from .capabilities import parse_ddm_capabilities
+from .logging_utils import summarize, summarize_keys
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -160,9 +161,11 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not saids:
             return
         try:
+            _LOGGER.debug("Starting Whirlpool ThingShield MQTT for %d appliance(s): %s", len(saids), sorted(saids))
             await self.thing_manager.ensure_started(saids, self._latest_appliances)
             self._thing_started = True
             self._merge_thing_metadata()
+            _LOGGER.debug("Whirlpool ThingShield MQTT startup complete")
         except WhirlpoolApiError as err:
             _LOGGER.warning("Whirlpool ThingShield MQTT startup failed: %s", err)
 
@@ -176,7 +179,10 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Publish a command to a ThingShield appliance."""
         if said not in self.thing_manager.runtimes:
             await self.async_start_push()
-        return await self.thing_manager.publish_command(said, command, payload)
+        _LOGGER.debug("Publishing Whirlpool ThingShield command: said=%s command=%s payload=%s", said, command, summarize(payload))
+        result = await self.thing_manager.publish_command(said, command, payload)
+        _LOGGER.debug("Published Whirlpool ThingShield command result: said=%s command=%s result=%s", said, command, summarize(result))
+        return result
 
     async def async_fetch_ddm_capabilities(
         self,
@@ -189,6 +195,7 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         appliances = appliances if appliances is not None else self._latest_appliances
         statuses = statuses if statuses is not None else self._latest_statuses
 
+        _LOGGER.debug("Refreshing Whirlpool DDM capabilities: appliance_count=%d force=%s", len(appliances), force)
         ddm_keys: dict[str, dict[str, Any]] = {}
         for appliance in appliances:
             said = appliance_said(appliance)
@@ -214,17 +221,28 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         for key, metadata in ddm_keys.items():
             if not force and key in self._ddm_capabilities:
+                _LOGGER.debug("Using cached Whirlpool DDM capabilities: key=%s metadata=%s", key, summarize(metadata))
                 continue
             try:
                 first_said = next((str(s) for s in metadata.get("appliance_saids", []) if s), None)
+                _LOGGER.debug("Fetching Whirlpool DDM capabilities: key=%s said=%s metadata=%s", key, first_said, summarize(metadata))
                 payload = await self.client.get_ddm_capabilities(key, said=first_said, force=force)
             except WhirlpoolApiError as err:
                 self._ddm_errors[key] = str(err)
-                _LOGGER.debug("DDM capability fetch failed for %s: %s", key, err)
+                _LOGGER.warning("DDM capability fetch failed for %s: %s", key, err)
                 continue
+            parsed = parse_ddm_capabilities(payload)
+            _LOGGER.debug(
+                "Parsed Whirlpool DDM capabilities: key=%s schema=%s attributes=%s features=%s cooking=%s",
+                key,
+                parsed.get("schema"),
+                parsed.get("attribute_count"),
+                summarize(parsed.get("supported_features")),
+                summarize_keys(parsed.get("cooking")),
+            )
             self._ddm_capabilities[key] = {
                 "metadata": metadata,
-                "parsed": parse_ddm_capabilities(payload),
+                "parsed": parsed,
                 "payload": payload,
             }
             self._ddm_errors.pop(key, None)
@@ -248,9 +266,12 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
+            _LOGGER.debug("Starting Whirlpool coordinator refresh")
             if not self.client.authenticated:
+                _LOGGER.debug("Whirlpool client is not authenticated; logging in before refresh")
                 await self.client.login()
             appliances = await self.client.list_appliances()
+            _LOGGER.debug("Whirlpool appliance list refreshed: count=%d payload=%s", len(appliances), summarize(appliances))
             self._latest_appliances = appliances
             self._merge_thing_metadata()
             statuses: dict[str, Any] = dict(self._latest_statuses)
@@ -297,12 +318,21 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     continue
                 snapshot = await self._try_legacy_snapshot(said)
                 if snapshot is not None:
+                    _LOGGER.debug("Whirlpool legacy snapshot updated: said=%s shape=%s", said, summarize_keys(snapshot))
                     statuses[said] = snapshot
                 else:
+                    _LOGGER.debug("Whirlpool legacy snapshot unavailable: said=%s", said)
                     statuses[said] = {"error": "No usable Whirlpool REST status/appliance snapshot returned"}
             self._latest_statuses = statuses
             appliance_metadata = self._build_appliance_metadata(appliances, statuses)
             await self.async_fetch_ddm_capabilities(appliances, statuses)
+            _LOGGER.debug(
+                "Completed Whirlpool coordinator refresh: appliances=%d statuses=%d ddm=%d ddm_errors=%d",
+                len(appliances),
+                len(statuses),
+                len(self._ddm_capabilities),
+                len(self._ddm_errors),
+            )
             return {
                 "appliances": appliances,
                 "statuses": statuses,
@@ -311,6 +341,7 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "ddm_errors": self._ddm_errors,
             }
         except WhirlpoolApiError as err:
+            _LOGGER.warning("Whirlpool coordinator refresh failed: %s", err)
             raise UpdateFailed(str(err)) from err
 
     async def _try_rest_snapshot(self, said: str) -> Any | None:
@@ -332,17 +363,20 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             try:
                 data = await getter(said)
             except WhirlpoolApiError as err:
-                _LOGGER.debug("Optional REST snapshot failed for %s: %s", said, err)
+                _LOGGER.debug("Optional REST snapshot failed: said=%s getter=%s error=%s", said, getter.__name__, err)
                 continue
+            _LOGGER.debug("Optional REST snapshot succeeded: said=%s getter=%s shape=%s", said, getter.__name__, summarize_keys(data))
             if isinstance(data, Mapping):
                 merged.update(data)
             else:
                 merged.setdefault("payload", data)
             got_any = True
+        _LOGGER.debug("Merged Whirlpool REST snapshot: said=%s got_any=%s shape=%s", said, got_any, summarize_keys(merged))
         return merged if got_any else None
 
     def _handle_thing_state(self, said: str, state: dict[str, Any]) -> None:
         """Merge a MQTT state update into the coordinator on the HA event loop."""
+        _LOGGER.debug("Received Whirlpool ThingShield state update: said=%s shape=%s payload=%s", said, summarize_keys(state), summarize(state))
         def apply() -> None:
             statuses = dict(self._latest_statuses)
             statuses[said] = state

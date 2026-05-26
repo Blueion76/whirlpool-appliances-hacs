@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from collections.abc import Mapping
 from typing import Any
@@ -15,6 +16,9 @@ from . import WhirlpoolApkConfigEntry
 from .api import appliance_said
 from .entity import WhirlpoolApkEntity, attr_value, celsius_to_unit, entity_name_from_key, find_key, is_cooking_appliance, oven_cavity_exists, unit_to_celsius
 from .oven_options import current_oven_options, local_options, minutes_to_seconds, oven_is_active, update_local_options
+from .logging_utils import summarize
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _temp_from_tenths(value) -> float | None:
@@ -204,6 +208,7 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, NumberEntity):
         if self.cavity in ("upper", "lower") and oven_is_active(self.flat_status, self.cavity):
             options = current_oven_options(self.coordinator, self.said, self.cavity, self.flat_status)
             options["target_temp"] = celsius
+            _LOGGER.debug("Changing active Whirlpool oven target temperature: entity=%s said=%s cavity=%s value=%s%s target_c=%s options=%s", self.entity_id, self.said, self.cavity, value, self.temperature_unit, celsius, summarize(options))
             self._check_service_request(await self.client.stop_oven_cavity(self.said, self.cavity))
             await asyncio.sleep(1)
             self._check_service_request(
@@ -221,6 +226,7 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, NumberEntity):
             return
 
         # Idle: do not send a partial attribute. Store it for the Start Oven button.
+        _LOGGER.debug("Stored pending Whirlpool oven target temperature: entity=%s said=%s cavity=%s value=%s%s target_c=%s", self.entity_id, self.said, self.cavity, value, self.temperature_unit, celsius)
         update_local_options(self.coordinator, self.said, self.cavity, target_temp=celsius)
         self.async_write_ha_state()
 
@@ -271,6 +277,7 @@ class WhirlpoolOvenTimeNumber(WhirlpoolApkEntity, NumberEntity):
                 options["cook_time_minutes"] = minutes
             else:
                 options["delay_time_minutes"] = minutes
+            _LOGGER.debug("Changing active Whirlpool oven %s: entity=%s said=%s cavity=%s minutes=%s options=%s", self.kind, self.entity_id, self.said, self.cavity, minutes, summarize(options))
 
             self._check_service_request(await self.client.stop_oven_cavity(self.said, self.cavity))
             await asyncio.sleep(1)
@@ -289,8 +296,10 @@ class WhirlpoolOvenTimeNumber(WhirlpoolApkEntity, NumberEntity):
             return
 
         if self.kind == "cook_time":
+            _LOGGER.debug("Stored pending Whirlpool oven cook time: entity=%s said=%s cavity=%s minutes=%s", self.entity_id, self.said, self.cavity, minutes)
             update_local_options(self.coordinator, self.said, self.cavity, cook_time_minutes=minutes)
         else:
+            _LOGGER.debug("Stored pending Whirlpool oven delay time: entity=%s said=%s cavity=%s minutes=%s", self.entity_id, self.said, self.cavity, minutes)
             update_local_options(self.coordinator, self.said, self.cavity, delay_time_minutes=minutes)
         self.async_write_ha_state()
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from collections.abc import Mapping
 from typing import Any
@@ -18,6 +19,9 @@ from .capabilities import cooking_cavity_capability
 from .api import appliance_ddm_key, appliance_said
 from .entity import WhirlpoolApkEntity, attr_value, entity_name_from_key, find_key, is_cooking_appliance, is_refrigerator_appliance, oven_cavity_exists
 from .oven_options import FROZEN_BAKE_FOOD_OPTIONS, current_oven_options, local_options, minutes_to_seconds, oven_is_active, update_local_options
+from .logging_utils import summarize
+
+_LOGGER = logging.getLogger(__name__)
 
 REFRIGERATOR_TEMP_MAP = {-4: "12", -2: "11", 0: "10", 3: "9", 5: "8"}
 REFRIGERATOR_TEMP_MAP_REVERSED = {value: str(key) for key, value in REFRIGERATOR_TEMP_MAP.items()}
@@ -254,6 +258,7 @@ class WhirlpoolOvenCompleteActionSelect(WhirlpoolApkEntity, SelectEntity):
         if oven_is_active(self.flat_status, self.cavity):
             options = current_oven_options(self.coordinator, self.said, self.cavity, self.flat_status)
             options["complete_action"] = complete_action
+            _LOGGER.debug("Changing active Whirlpool oven complete action: entity=%s said=%s cavity=%s option=%s options=%s", self.entity_id, self.said, self.cavity, option, summarize(options))
             self._check_service_request(await self.client.stop_oven_cavity(self.said, self.cavity))
             await asyncio.sleep(1)
             self._check_service_request(
@@ -270,6 +275,7 @@ class WhirlpoolOvenCompleteActionSelect(WhirlpoolApkEntity, SelectEntity):
             await self.coordinator.async_request_refresh()
             return
 
+        _LOGGER.debug("Stored pending Whirlpool oven complete action: entity=%s said=%s cavity=%s option=%s", self.entity_id, self.said, self.cavity, option)
         update_local_options(self.coordinator, self.said, self.cavity, complete_action=complete_action)
         self.async_write_ha_state()
 
@@ -319,6 +325,7 @@ class WhirlpoolOvenModeSelect(WhirlpoolApkEntity, SelectEntity):
             options = current_oven_options(self.coordinator, self.said, self.cavity, self.flat_status)
             options["mode"] = mode
             options["frozen_food"] = None
+            _LOGGER.debug("Changing active Whirlpool oven mode: entity=%s said=%s cavity=%s option=%s options=%s", self.entity_id, self.said, self.cavity, option, summarize(options))
             self._check_service_request(await self.client.stop_oven_cavity(self.said, self.cavity))
             await asyncio.sleep(1)
             self._check_service_request(
@@ -335,6 +342,7 @@ class WhirlpoolOvenModeSelect(WhirlpoolApkEntity, SelectEntity):
             await self.coordinator.async_request_refresh()
             return
 
+        _LOGGER.debug("Stored pending Whirlpool oven mode: entity=%s said=%s cavity=%s option=%s", self.entity_id, self.said, self.cavity, option)
         update_local_options(self.coordinator, self.said, self.cavity, mode=mode, frozen_food=None)
         self.async_write_ha_state()
 
@@ -361,10 +369,12 @@ class WhirlpoolFrozenBakePresetSelect(WhirlpoolApkEntity, SelectEntity):
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
 
         if option == "None":
+            _LOGGER.debug("Cleared pending Whirlpool Frozen Bake preset: entity=%s said=%s cavity=%s", self.entity_id, self.said, self.cavity)
             update_local_options(self.coordinator, self.said, self.cavity, frozen_food=None)
         else:
             food = option.lower().replace(" ", "_")
             updates = _frozen_bake_defaults(self.coordinator, self.appliance, self.cavity, food)
+            _LOGGER.debug("Stored pending Whirlpool Frozen Bake preset: entity=%s said=%s cavity=%s option=%s defaults=%s", self.entity_id, self.said, self.cavity, option, summarize(updates))
             update_local_options(
                 self.coordinator,
                 self.said,
