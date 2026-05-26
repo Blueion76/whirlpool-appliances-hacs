@@ -421,7 +421,7 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
             model=str(model or ""),
             model_id=str(model or ""),
             serial_number=str(serial or ""),
-            hw_version=f"SAID: {self.said}",
+            hw_version=self.said,
             sw_version=str(cc_uri or ddm_key or ""),
         )
         self._attr_extra_state_attributes = {
