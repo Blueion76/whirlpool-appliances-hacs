@@ -52,6 +52,12 @@ def _redact(value: Any, *, parent_key: str = "") -> Any:
     if any(part in key_lower for part in SENSITIVE_KEY_PARTS):
         if value in (None, "", [], {}):
             return value
+        if isinstance(value, list):
+            return [REDACTED for _ in value]
+        if isinstance(value, tuple):
+            return tuple(REDACTED for _ in value)
+        if isinstance(value, Mapping):
+            return {str(key): REDACTED for key in value}
         return REDACTED
 
     if isinstance(value, Mapping):

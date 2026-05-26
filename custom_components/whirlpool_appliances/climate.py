@@ -18,7 +18,8 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import WhirlpoolApkConfigEntry
-from .api import appliance_said
+from .api import appliance_ddm_key, appliance_said
+from .capabilities import cooking_cavity_capability
 from .const import DOMAIN
 from .entity import (
     WhirlpoolApkEntity,
@@ -57,11 +58,7 @@ OVEN_PRESET_TO_SERVICE_MODE = {
 OVEN_PRESET_TO_CODE = {name: code for code, name in OVEN_MODE_CODE_TO_PRESET.items()}
 OVEN_PRESETS = list(OVEN_MODE_CODE_TO_PRESET.values())
 
-# App/status capability handling:
-# The Whirlpool APK exposes /api/v1/contents/all/{ddmKey} and the raw payload
-# has Relational_CapabilityMode* attributes, but this WOC54EC0HS00 Minerva combo
-# reports those capability attributes as placeholder "0". Use a model/DDM
-# allowlist for models where the app only exposes a small subset of modes.
+# Fallback only. Prefer DDM/personality capabilities from /api/v2/DeviceDataModel.
 LIMITED_OVEN_MODE_OPTIONS_BY_MODEL = {
     "WOC54EC0HS00": ["Bake", "Broil", "Keep Warm"],
 }
@@ -78,7 +75,40 @@ def _appliance_field(appliance: Mapping[str, Any], *keys: str) -> str | None:
     return None
 
 
-def _supported_oven_presets(appliance: Mapping[str, Any]) -> list[str]:
+def _parsed_ddm_for_appliance(coordinator, appliance: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    data = coordinator.data or {}
+    ddm_key = appliance_ddm_key(appliance) or _appliance_field(appliance, "DATA_MODEL_KEY", "dataModelKey", "ddmKey")
+    capabilities = data.get("ddm_capabilities") or {}
+    if ddm_key and isinstance(capabilities.get(ddm_key), Mapping):
+        parsed = capabilities[ddm_key].get("parsed")
+        if isinstance(parsed, Mapping):
+            return parsed
+
+    # Fallback by SAID metadata, useful if a future cache key includes the SAID.
+    said = appliance_said(appliance)
+    if said:
+        for entry in capabilities.values():
+            if not isinstance(entry, Mapping):
+                continue
+            metadata = entry.get("metadata") or {}
+            if said in (metadata.get("appliance_saids") or []):
+                parsed = entry.get("parsed")
+                if isinstance(parsed, Mapping):
+                    return parsed
+    return None
+
+
+def _oven_capability(coordinator, appliance: Mapping[str, Any], cavity: str | None) -> Mapping[str, Any] | None:
+    return cooking_cavity_capability(_parsed_ddm_for_appliance(coordinator, appliance), cavity)
+
+
+def _supported_oven_presets(appliance: Mapping[str, Any], capability: Mapping[str, Any] | None = None) -> list[str]:
+    if isinstance(capability, Mapping):
+        presets = [str(item) for item in capability.get("supported_presets") or [] if item]
+        presets = [preset for preset in presets if preset in OVEN_PRESET_TO_SERVICE_MODE and preset != "Standby"]
+        if presets:
+            return presets
+
     model = _appliance_field(appliance, "MODEL_NO", "ModelNumber", "model", "modelNumber")
     if model and model in LIMITED_OVEN_MODE_OPTIONS_BY_MODEL:
         return LIMITED_OVEN_MODE_OPTIONS_BY_MODEL[model]
@@ -118,20 +148,16 @@ def _snap_temperature(value: float, unit: UnitOfTemperature) -> float:
 
 
 def _command_celsius(value: float, unit: UnitOfTemperature) -> float:
-    """Convert HA display temp to the best Whirlpool Celsius command value.
+    """Convert HA display temperature to Whirlpool Celsius command units.
 
-    The oven reports/displays in whole Celsius internally on many Minerva models.
-    If HA sends 345°F as 173.8°C, the appliance can truncate to 173°C and show
-    about 343°F. For user-entered Fahrenheit values, send the nearest whole
-    Celsius degree instead so HA's 5°F steps display correctly on the oven.
+    DDM TempRange values are tenths of °C. Return one decimal place so commands
+    can preserve captured defaults like 176.6 °C bake and 287.7 °C broil.
     """
     snapped = _snap_temperature(value, unit)
     celsius = unit_to_celsius(snapped, unit)
     if celsius is None:
         celsius = 176.6
-    if unit == UnitOfTemperature.FAHRENHEIT:
-        return float(round(celsius))
-    return celsius
+    return round(float(celsius), 1)
 
 
 async def async_setup_entry(
@@ -167,7 +193,8 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
     def __init__(self, coordinator, appliance: Mapping[str, Any], cavity: str | None) -> None:
         self.cavity = cavity
-        self._supported_presets = _supported_oven_presets(appliance)
+        self._oven_capability = _oven_capability(coordinator, appliance, cavity)
+        self._supported_presets = _supported_oven_presets(appliance, self._oven_capability)
         suffix = f"{cavity}_climate" if cavity else "climate"
         super().__init__(coordinator, appliance, suffix)
         self._attr_name = entity_name_from_key(suffix, appliance)
@@ -181,16 +208,90 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
     def temperature_unit(self) -> UnitOfTemperature:
         return super().temperature_unit
 
+    def _mode_capability(self, preset: str | None) -> Mapping[str, Any] | None:
+        if not preset or not isinstance(self._oven_capability, Mapping):
+            return None
+        by_preset = self._oven_capability.get("mode_by_preset")
+        value = by_preset.get(preset) if isinstance(by_preset, Mapping) else None
+        return value if isinstance(value, Mapping) else None
+
+    def _temperature_range(self, preset: str | None = None) -> Mapping[str, Any] | None:
+        cap = self._mode_capability(preset or self.preset_mode or self._supported_presets[0])
+        if not isinstance(cap, Mapping):
+            return None
+        temp = cap.get("target_temperature")
+        return temp if isinstance(temp, Mapping) else None
+
+    def _all_temperature_ranges(self) -> list[Mapping[str, Any]]:
+        if not isinstance(self._oven_capability, Mapping):
+            return []
+        ranges: list[Mapping[str, Any]] = []
+        for mode in self._oven_capability.get("modes") or []:
+            if isinstance(mode, Mapping) and isinstance(mode.get("target_temperature"), Mapping):
+                ranges.append(mode["target_temperature"])
+        return ranges
+
+    def _display_from_celsius(self, value: float | None) -> float | None:
+        if value is None:
+            return None
+        display = celsius_to_unit(value, self.temperature_unit)
+        if display is None:
+            return None
+        return float(round(display)) if self.temperature_unit == UnitOfTemperature.FAHRENHEIT else round(float(display), 1)
+
+    def _range_display_value(self, rng: Mapping[str, Any], key: str) -> float | None:
+        raw = rng.get(key)
+        if raw is None:
+            return None
+        return self._display_from_celsius(float(raw))
+
+    def _snap_to_capability_temperature(self, value: float, preset: str | None = None) -> float:
+        rng = self._temperature_range(preset)
+        if not isinstance(rng, Mapping):
+            return _snap_temperature(value, self.temperature_unit)
+
+        min_value = self._range_display_value(rng, "min_c")
+        max_value = self._range_display_value(rng, "max_c")
+        if min_value is None or max_value is None:
+            return _snap_temperature(value, self.temperature_unit)
+
+        step = rng.get("step_f") if self.temperature_unit == UnitOfTemperature.FAHRENHEIT else rng.get("step_c")
+        try:
+            step_value = float(step or 1)
+        except (TypeError, ValueError):
+            step_value = 1.0
+        if step_value <= 0:
+            step_value = 1.0
+
+        clamped = max(float(min_value), min(float(max_value), float(value)))
+        snapped = min_value + round((clamped - min_value) / step_value) * step_value
+        snapped = max(float(min_value), min(float(max_value), snapped))
+        return float(round(snapped)) if self.temperature_unit == UnitOfTemperature.FAHRENHEIT else round(float(snapped), 1)
+
     @property
     def min_temp(self) -> float:
-        return _allowed_temperatures(self.temperature_unit)[0]
+        ranges = self._all_temperature_ranges()
+        values = [self._range_display_value(rng, "min_c") for rng in ranges]
+        values = [value for value in values if value is not None]
+        return min(values) if values else _allowed_temperatures(self.temperature_unit)[0]
 
     @property
     def max_temp(self) -> float:
-        return _allowed_temperatures(self.temperature_unit)[-1]
+        ranges = self._all_temperature_ranges()
+        values = [self._range_display_value(rng, "max_c") for rng in ranges]
+        values = [value for value in values if value is not None]
+        return max(values) if values else _allowed_temperatures(self.temperature_unit)[-1]
 
     @property
     def target_temperature_step(self) -> float:
+        rng = self._temperature_range()
+        if isinstance(rng, Mapping):
+            step = rng.get("step_f") if self.temperature_unit == UnitOfTemperature.FAHRENHEIT else rng.get("step_c")
+            try:
+                if step and float(step) > 0:
+                    return float(step)
+            except (TypeError, ValueError):
+                pass
         return 5
 
     @property
@@ -225,7 +326,7 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
         display = celsius_to_unit(value, self.temperature_unit)
         if display is None:
             return None
-        return _snap_temperature(display, self.temperature_unit)
+        return self._snap_to_capability_temperature(display)
 
     def _active_preset_fallback(self) -> str | None:
         """Fallback when Minerva reports active state but leaves mode at 0.
@@ -260,8 +361,13 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
         return "bake"
 
     def _default_target_temperature_for_preset(self, preset: str | None) -> float:
-        # Match app-observed defaults for modes that the app starts at a fixed
-        # temperature. Broil capture used 2877 tenths °C, about 550°F.
+        rng = self._temperature_range(preset)
+        if isinstance(rng, Mapping):
+            value = self._range_display_value(rng, "default_c")
+            if value is not None:
+                return value
+
+        # Fallback app-observed defaults.
         if preset in {"Broil", "Convection Broil"}:
             temp_f = 550
         elif preset == "Keep Warm":
@@ -292,7 +398,7 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
         self._check_service_request(
             await self.client.set_oven_cook(
                 self.said,
-                _command_celsius(float(temperature), self.temperature_unit),
+                unit_to_celsius(self._snap_to_capability_temperature(float(temperature)), self.temperature_unit) or 176.6,
                 self._selected_service_mode(),
                 self.cavity,
             )
@@ -324,7 +430,7 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
         self._check_service_request(
             await self.client.set_oven_cook(
                 self.said,
-                _command_celsius(float(target), self.temperature_unit),
+                unit_to_celsius(self._snap_to_capability_temperature(float(target), preset_mode), self.temperature_unit) or 176.6,
                 OVEN_PRESET_TO_SERVICE_MODE[preset_mode],
                 self.cavity,
             )
@@ -353,7 +459,7 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
         self._check_service_request(
             await self.client.set_oven_cook(
                 self.said,
-                _command_celsius(float(target), self.temperature_unit),
+                unit_to_celsius(self._snap_to_capability_temperature(float(target), current_preset), self.temperature_unit) or 176.6,
                 self._selected_service_mode(),
                 self.cavity,
             )
