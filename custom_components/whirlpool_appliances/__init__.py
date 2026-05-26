@@ -133,7 +133,7 @@ def _service_said(hass: HomeAssistant, call: ServiceCall) -> str:
     if said:
         return str(said)
 
-    entity_id = call.data.get("entity_id")
+    entity_id = call.data.get("appliance_entity")
     if entity_id:
         if isinstance(entity_id, list):
             entity_id = entity_id[0]
@@ -294,28 +294,28 @@ def _register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "send_appliance_command",
         send_command,
-        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Optional("command", default="setAttributes"): str, vol.Optional("attributes"): object, vol.Optional("raw"): object}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Optional("command", default="setAttributes"): str, vol.Optional("attributes"): object, vol.Optional("raw"): object}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "set_cavity_light",
         set_cavity_light,
-        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Required("on"): bool, vol.Optional("cavity"): str}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Required("on"): bool, vol.Optional("cavity"): str}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "publish_thing_command",
         publish_thing_command,
-        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Optional("command", default="getState"): str, vol.Optional("payload"): object}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Optional("command", default="getState"): str, vol.Optional("payload"): object}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "set_attributes",
         set_attributes,
-        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Required("attributes"): dict}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Required("attributes"): dict}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
@@ -324,7 +324,7 @@ def _register_services(hass: HomeAssistant) -> None:
         set_oven_cook,
         schema=vol.Schema(
             {
-                vol.Optional("entity_id"): object, vol.Optional("said"): str,
+                vol.Optional("appliance_entity"): str, vol.Optional("said"): str,
                 vol.Required("temperature"): vol.Coerce(float),
                 vol.Optional("mode", default="bake"): vol.In([
                     "bake",
@@ -348,7 +348,7 @@ def _register_services(hass: HomeAssistant) -> None:
         "stop_oven_cavity",
         stop_oven_cavity,
         schema=vol.Schema(
-            {vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Optional("cavity", default="upper"): vol.In(["upper", "lower"])}
+            {vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Optional("cavity", default="upper"): vol.In(["upper", "lower"])}
         ),
         supports_response=SupportsResponse.OPTIONAL,
     )
@@ -356,21 +356,21 @@ def _register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "stop_microwave",
         stop_microwave,
-        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "set_quiet_mode",
         set_quiet_mode,
-        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Required("on"): bool}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Required("on"): bool}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "set_remote_enable",
         set_remote_enable,
-        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Required("on"): bool}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Required("on"): bool}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
@@ -378,7 +378,7 @@ def _register_services(hass: HomeAssistant) -> None:
         "set_kitchen_timer",
         set_kitchen_timer,
         schema=vol.Schema({
-            vol.Optional("entity_id"): object, vol.Optional("said"): str,
+            vol.Optional("appliance_entity"): str, vol.Optional("said"): str,
             vol.Required("seconds"): vol.Coerce(int),
             vol.Optional("timer", default=1): vol.Coerce(int),
         }),
@@ -389,7 +389,7 @@ def _register_services(hass: HomeAssistant) -> None:
         "stop_kitchen_timer",
         stop_kitchen_timer,
         schema=vol.Schema({
-            vol.Optional("entity_id"): object, vol.Optional("said"): str,
+            vol.Optional("appliance_entity"): str, vol.Optional("said"): str,
             vol.Optional("timer", default=1): vol.Coerce(int),
         }),
         supports_response=SupportsResponse.OPTIONAL,
@@ -398,21 +398,21 @@ def _register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "check_firmware_update",
         check_firmware_update,
-        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "sync_time",
         sync_time,
-        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Optional("timezone"): str}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Optional("timezone"): str}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "set_time_auto_update",
         set_time_auto_update,
-        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Required("enabled"): bool, vol.Optional("timezone"): str}),
+        schema=vol.Schema({vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Required("enabled"): bool, vol.Optional("timezone"): str}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(DOMAIN, "refresh", refresh)
@@ -420,6 +420,6 @@ def _register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "appliance_function",
         appliance_function,
-        schema=vol.Schema({vol.Required("function"): vol.In(list(APPLIANCE_FUNCTIONS)), vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Optional("body"): object, vol.Optional("path_values"): object}),
+        schema=vol.Schema({vol.Required("function"): vol.In(list(APPLIANCE_FUNCTIONS)), vol.Optional("appliance_entity"): str, vol.Optional("said"): str, vol.Optional("body"): object, vol.Optional("path_values"): object}),
         supports_response=SupportsResponse.OPTIONAL,
     )
