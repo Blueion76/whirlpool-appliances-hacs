@@ -385,6 +385,9 @@
     },
     "invalid_value_set": {
       "message": "The selected Whirlpool value is not valid for this appliance."
+    },
+    "remote_enable_off": {
+      "message": "Remote enable is off on the oven. Command unable to be sent."
     }
   },
   "services": {

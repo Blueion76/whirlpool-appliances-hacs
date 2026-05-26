@@ -478,22 +478,40 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
             self._unavailable_logged = False
         return available
 
-    @staticmethod
-    def _check_service_request(result: Any) -> None:
-        """Raise a Home Assistant error when a Whirlpool control request failed."""
-        if result is False:
+    def _remote_enable_is_off(self) -> bool:
+        """Return true if the latest status says remote control is disabled."""
+        raw = attr_value(
+            self.flat_status,
+            "XCat_RemoteSetRemoteControlEnable",
+            "XCat_RemoteControlEnable",
+            "remoteControlEnable",
+            "remoteEnable",
+            "remoteEnabled",
+        )
+        if raw is None:
+            return False
+        return str(raw).strip().lower() in {"0", "false", "off", "disabled"}
+
+    def _raise_command_failed(self) -> None:
+        if self._remote_enable_is_off():
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
-                translation_key="request_failed",
+                translation_key="remote_enable_off",
             )
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="request_failed",
+        )
+
+    def _check_service_request(self, result: Any) -> None:
+        """Raise a Home Assistant error when a Whirlpool control request failed."""
+        if result is False:
+            self._raise_command_failed()
         if isinstance(result, Mapping):
             status = str(result.get("status", "")).strip().lower()
             message = str(result.get("message", "")).strip().lower()
             if status in {"error", "failed", "fail", "02", "2", "nack"} or "negative acknow" in message:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="request_failed",
-                )
+                self._raise_command_failed()
 
     def _manufacturer(self, appliance: Mapping[str, Any]) -> str:
         model = str(first_value(appliance, ("MODEL_NO", "modelNumber", "model", "model_number")) or "")
