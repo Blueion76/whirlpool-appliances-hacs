@@ -258,6 +258,11 @@
     },
     "firmware_update": {
       "name": "Firmware"
+    },
+    "lock": {
+      "control_lock": {
+        "name": "Control lock"
+      }
     }
   },
   "exceptions": {

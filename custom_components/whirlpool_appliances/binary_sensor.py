@@ -111,6 +111,7 @@ BINARY_DESCRIPTIONS: tuple[WhirlpoolApkBinarySensorDescription, ...] = (
     WhirlpoolApkBinarySensorDescription(
         key="remote_control",
         translation_key="remote_control",
+        icon="mdi:remote",
         value_fn=lambda flat: (
             _bool(attr_value(flat, "XCat_RemoteSetRemoteControlEnable"))
             if attr_value(flat, "XCat_RemoteSetRemoteControlEnable") is not None
@@ -118,7 +119,7 @@ BINARY_DESCRIPTIONS: tuple[WhirlpoolApkBinarySensorDescription, ...] = (
         ),
     ),
     WhirlpoolApkBinarySensorDescription(key="running", translation_key="running", device_class=BinarySensorDeviceClass.RUNNING, value_fn=_running),
-    WhirlpoolApkBinarySensorDescription(key="error", translation_key="error", device_class=BinarySensorDeviceClass.PROBLEM, value_fn=_problem),
+    WhirlpoolApkBinarySensorDescription(key="error", translation_key="error", icon="mdi:alert", device_class=BinarySensorDeviceClass.PROBLEM, value_fn=_problem),
     WhirlpoolApkBinarySensorDescription(key="upper_door", translation_key="upper_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("OvenUpperCavity_OpStatusDoorOpen"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(key="lower_door", translation_key="lower_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("OvenLowerCavity_OpStatusDoorOpen"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(
@@ -135,7 +136,7 @@ BINARY_DESCRIPTIONS: tuple[WhirlpoolApkBinarySensorDescription, ...] = (
     WhirlpoolApkBinarySensorDescription(key="upper_meat_probe", translation_key="upper_meat_probe", value_fn=_bool_attr("OvenUpperCavity_AlertStatusMeatProbePluggedIn"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(key="lower_meat_probe", translation_key="lower_meat_probe", value_fn=_bool_attr("OvenLowerCavity_AlertStatusMeatProbePluggedIn"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(key="microwave_door", translation_key="microwave_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("Mwo_OperationStatusDoorOpen"), cooking_only=True, microwave_only=True),
-    WhirlpoolApkBinarySensorDescription(key="microwave_running", translation_key="microwave_running", device_class=BinarySensorDeviceClass.RUNNING, value_fn=lambda flat: (None if (s := attr_value(flat, "Mwo_OperationStatusState")) is None else str(s) in {"1", "2", "running", "cooking"}), cooking_only=True, microwave_only=True),
+    WhirlpoolApkBinarySensorDescription(key="microwave_running", translation_key="microwave_running", icon="mdi:power-off", device_class=BinarySensorDeviceClass.RUNNING, value_fn=lambda flat: (None if (s := attr_value(flat, "Mwo_OperationStatusState")) is None else str(s) in {"1", "2", "running", "cooking"}), cooking_only=True, microwave_only=True),
     WhirlpoolApkBinarySensorDescription(key="microwave_light", translation_key="microwave_light", value_fn=_bool_attr("Mwo_DisplaySetLightOn"), cooking_only=True, microwave_only=True, entity_registry_enabled_default=False),
     WhirlpoolApkBinarySensorDescription(key="microwave_turntable", translation_key="microwave_turntable", value_fn=_bool_attr("Mwo_CycleSetTurntable"), cooking_only=True, microwave_only=True),
 )
@@ -191,6 +192,12 @@ class WhirlpoolApkBinarySensor(WhirlpoolApkEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         return self.entity_description.value_fn(self.flat_status)
+
+    @property
+    def icon(self) -> str | None:
+        if self.entity_description.key == "microwave_running":
+            return "mdi:power-on" if self.is_on else "mdi:power-off"
+        return self.entity_description.icon
 
 
 

@@ -60,10 +60,10 @@ async def _check_firmware_update(client, said: str):
 # though /api/v1/appliance/{said} and STOMP updates work. Keep the method
 # available for diagnostics/services, but avoid a broken entity in HA.
 BUTTONS = (
-    WhirlpoolButtonDescription(key="refresh_status", translation_key="refresh_status", press_fn=_refresh_status),
-    WhirlpoolButtonDescription(key="sync_time", translation_key="sync_time", press_fn=_sync_time),
-    WhirlpoolButtonDescription(key="stop_kitchen_timer_1", translation_key="stop_kitchen_timer_1", press_fn=_stop_kitchen_timer),
-    WhirlpoolButtonDescription(key="check_firmware_update", translation_key="check_firmware_update", press_fn=_check_firmware_update),
+    WhirlpoolButtonDescription(key="refresh_status", translation_key="refresh_status", icon="mdi:cloud-refresh-variant", press_fn=_refresh_status),
+    WhirlpoolButtonDescription(key="sync_time", translation_key="sync_time", icon="mdi:cloud-clock", press_fn=_sync_time),
+    WhirlpoolButtonDescription(key="stop_kitchen_timer_1", translation_key="stop_kitchen_timer_1", icon="mdi:timer-stop", press_fn=_stop_kitchen_timer),
+    WhirlpoolButtonDescription(key="check_firmware_update", translation_key="check_firmware_update", icon="mdi:cloud-refresh-variant", press_fn=_check_firmware_update),
 )
 
 THING_BUTTONS = (
@@ -71,9 +71,9 @@ THING_BUTTONS = (
 )
 
 COOKING_BUTTONS = (
-    WhirlpoolButtonDescription(key="stop_upper_oven", translation_key="stop_upper_oven", press_fn=_stop_upper_oven),
-    WhirlpoolButtonDescription(key="stop_lower_oven", translation_key="stop_lower_oven", press_fn=_stop_lower_oven),
-    WhirlpoolButtonDescription(key="stop_microwave", translation_key="stop_microwave", press_fn=_stop_microwave),
+    WhirlpoolButtonDescription(key="stop_upper_oven", translation_key="stop_upper_oven", icon="mdi:stop", press_fn=_stop_upper_oven),
+    WhirlpoolButtonDescription(key="stop_lower_oven", translation_key="stop_lower_oven", icon="mdi:stop", press_fn=_stop_lower_oven),
+    WhirlpoolButtonDescription(key="stop_microwave", translation_key="stop_microwave", icon="mdi:stop", press_fn=_stop_microwave),
 )
 
 

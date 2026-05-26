@@ -165,6 +165,7 @@ class WhirlpoolKitchenTimerNumber(WhirlpoolApkEntity, NumberEntity):
         self.entity_description = NumberEntityDescription(
             key="kitchen_timer_1_set",
             translation_key="kitchen_timer_1_set",
+            icon="mdi:timer",
             native_min_value=0,
             native_max_value=23 * 60 * 60 + 59 * 60 + 59,
             native_step=1,

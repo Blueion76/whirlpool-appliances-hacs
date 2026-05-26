@@ -35,9 +35,6 @@ async def _set_power(client, said: str, on: bool):
     return await client.set_power(said, on)
 
 
-async def _set_control_lock(client, said: str, on: bool):
-    return await client.set_oven_control_lock(said, on)
-
 
 async def _set_remote_enable(client, said: str, on: bool):
     return await client.set_remote_enable(said, on)
@@ -61,12 +58,11 @@ async def _set_time_auto_update(client, said: str, on: bool):
 
 SWITCHES = (
     WhirlpoolSwitchDescription(key="power", translation_key="power", entity_registry_enabled_default=False, value_fn=lambda flat: _to_bool(find_key(flat, ("powerOn", "power", "isOn"))), set_fn=_set_power, non_cooking_only=True),
-    WhirlpoolSwitchDescription(key="control_lock", translation_key="control_lock", value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OperationSetControlLock")), set_fn=_set_control_lock, cooking_only=True),
-    WhirlpoolSwitchDescription(key="remote_enable", translation_key="remote_enable", value_fn=lambda flat: _to_bool(attr_value(flat, "XCat_RemoteSetRemoteControlEnable")), set_fn=_set_remote_enable, cooking_only=True),
-    WhirlpoolSwitchDescription(key="sabbath_mode", translation_key="sabbath_mode", entity_registry_enabled_default=False, value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OperationSetSabbathModeEnabled")), set_fn=_set_sabbath, cooking_only=True),
-    WhirlpoolSwitchDescription(key="quiet_mode", translation_key="quiet_mode", value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OperationSetQuietModeEnabled")), set_fn=_set_quiet_mode, cooking_only=True),
-    WhirlpoolSwitchDescription(key="time_auto_update", translation_key="time_auto_update", value_fn=lambda flat: str(attr_value(flat, "DateTimeMode") or attr_value(flat, "XCat_DateTimeMode") or "") == "2", set_fn=_set_time_auto_update, cooking_only=True),
-    WhirlpoolSwitchDescription(key="microwave_turntable", translation_key="microwave_turntable", value_fn=lambda flat: _to_bool(attr_value(flat, "Mwo_CycleSetTurntable")), set_fn=_set_microwave_turntable, cooking_only=True, microwave_only=True),
+    WhirlpoolSwitchDescription(key="remote_enable", translation_key="remote_enable", icon="mdi:cloud-check-variant", value_fn=lambda flat: _to_bool(attr_value(flat, "XCat_RemoteSetRemoteControlEnable")), set_fn=_set_remote_enable, cooking_only=True),
+    WhirlpoolSwitchDescription(key="sabbath_mode", translation_key="sabbath_mode", icon="mdi:candelabra-fire", entity_registry_enabled_default=False, value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OperationSetSabbathModeEnabled")), set_fn=_set_sabbath, cooking_only=True),
+    WhirlpoolSwitchDescription(key="quiet_mode", translation_key="quiet_mode", icon="mdi:volume-high", value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OperationSetQuietModeEnabled")), set_fn=_set_quiet_mode, cooking_only=True),
+    WhirlpoolSwitchDescription(key="time_auto_update", translation_key="time_auto_update", icon="mdi:cloud-download", value_fn=lambda flat: str(attr_value(flat, "DateTimeMode") or attr_value(flat, "XCat_DateTimeMode") or "") == "2", set_fn=_set_time_auto_update, cooking_only=True),
+    WhirlpoolSwitchDescription(key="microwave_turntable", translation_key="microwave_turntable", icon="mdi:microwave", value_fn=lambda flat: _to_bool(attr_value(flat, "Mwo_CycleSetTurntable")), set_fn=_set_microwave_turntable, cooking_only=True, microwave_only=True),
 )
 
 
@@ -106,6 +102,12 @@ class WhirlpoolApkSwitch(WhirlpoolApkEntity, SwitchEntity):
     @property
     def is_on(self) -> bool | None:
         return self.entity_description.value_fn(self.flat_status)
+
+    @property
+    def icon(self) -> str | None:
+        if self.entity_description.key == "quiet_mode":
+            return "mdi:volume-off" if self.is_on else "mdi:volume-high"
+        return self.entity_description.icon
 
     async def async_turn_on(self, **kwargs) -> None:
         self._check_service_request(await self.entity_description.set_fn(self.client, self.said, True))

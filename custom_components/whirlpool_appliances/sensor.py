@@ -370,26 +370,26 @@ SENSOR_DESCRIPTIONS: tuple[WhirlpoolApkSensorDescription, ...] = (
     WhirlpoolApkSensorDescription(key="target_temperature", translation_key="target_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_generic_target_temp),
     WhirlpoolApkSensorDescription(key="humidity", translation_key="humidity", device_class=SensorDeviceClass.HUMIDITY, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=PERCENTAGE, value_fn=_by_keys("humidity", "currentHumidity")),
     WhirlpoolApkSensorDescription(key="filter_status", translation_key="filter_status", value_fn=_by_keys("filterStatus", "acFilterStatus")),
-    WhirlpoolApkSensorDescription(key="fault_code", translation_key="fault_code", value_fn=_active_fault),
-    WhirlpoolApkSensorDescription(key="cook_mode", translation_key="cook_mode", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=_generic_cook_mode, cooking_only=True),
-    WhirlpoolApkSensorDescription(key="upper_cavity_state", translation_key="upper_cavity_state", device_class=SensorDeviceClass.ENUM, options=list(CAVITY_STATE.values()), value_fn=_map_attr("OvenUpperCavity_OpStatusState", CAVITY_STATE), cooking_only=True),
-    WhirlpoolApkSensorDescription(key="lower_cavity_state", translation_key="lower_cavity_state", device_class=SensorDeviceClass.ENUM, options=list(CAVITY_STATE.values()), value_fn=_map_attr("OvenLowerCavity_OpStatusState", CAVITY_STATE), cooking_only=True),
-    WhirlpoolApkSensorDescription(key="upper_cook_mode", translation_key="upper_cook_mode", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=lambda flat: _oven_cook_mode(flat, "upper"), cooking_only=True),
-    WhirlpoolApkSensorDescription(key="lower_cook_mode", translation_key="lower_cook_mode", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=lambda flat: _oven_cook_mode(flat, "lower"), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="fault_code", translation_key="fault_code", icon="mdi:alert", value_fn=_active_fault),
+    WhirlpoolApkSensorDescription(key="cook_mode", translation_key="cook_mode", icon="mdi:chef-hat", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=_generic_cook_mode, cooking_only=True),
+    WhirlpoolApkSensorDescription(key="upper_cavity_state", translation_key="upper_cavity_state", icon="mdi:stove", device_class=SensorDeviceClass.ENUM, options=list(CAVITY_STATE.values()), value_fn=_map_attr("OvenUpperCavity_OpStatusState", CAVITY_STATE), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="lower_cavity_state", translation_key="lower_cavity_state", icon="mdi:stove", device_class=SensorDeviceClass.ENUM, options=list(CAVITY_STATE.values()), value_fn=_map_attr("OvenLowerCavity_OpStatusState", CAVITY_STATE), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="upper_cook_mode", translation_key="upper_cook_mode", icon="mdi:chef-hat", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=lambda flat: _oven_cook_mode(flat, "upper"), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="lower_cook_mode", translation_key="lower_cook_mode", icon="mdi:chef-hat", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=lambda flat: _oven_cook_mode(flat, "lower"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="upper_current_temperature", translation_key="upper_current_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_temp_tenths_attr("OvenUpperCavity_DisplStatusDisplayTemp"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="lower_current_temperature", translation_key="lower_current_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_temp_tenths_attr("OvenLowerCavity_DisplStatusDisplayTemp"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="upper_target_temperature", translation_key="upper_target_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_temp_tenths_attr("OvenUpperCavity_CycleSetTargetTemp"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="lower_target_temperature", translation_key="lower_target_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_temp_tenths_attr("OvenLowerCavity_CycleSetTargetTemp"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="upper_cook_time_elapsed", translation_key="upper_cook_time_elapsed", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=lambda flat: _oven_elapsed_seconds(flat, "upper"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="lower_cook_time_elapsed", translation_key="lower_cook_time_elapsed", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=lambda flat: _oven_elapsed_seconds(flat, "lower"), cooking_only=True),
-    WhirlpoolApkSensorDescription(key="kitchen_timer_1_state", translation_key="kitchen_timer_1_state", device_class=SensorDeviceClass.ENUM, options=list(TIMER_STATE.values()), value_fn=_map_attr("KitchenTimer01_StatusState", TIMER_STATE), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="kitchen_timer_1_state", translation_key="kitchen_timer_1_state", icon="mdi:timer-off", device_class=SensorDeviceClass.ENUM, options=list(TIMER_STATE.values()), value_fn=_map_attr("KitchenTimer01_StatusState", TIMER_STATE), cooking_only=True),
     WhirlpoolApkSensorDescription(key="kitchen_timer_1_remaining", translation_key="kitchen_timer_1_remaining", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_legacy_attr("KitchenTimer01_StatusTimeRemaining"), cooking_only=True),
-    WhirlpoolApkSensorDescription(key="microwave_state", translation_key="microwave_state", device_class=SensorDeviceClass.ENUM, options=list(MWO_STATE.values()), value_fn=_mwo_state, cooking_only=True, microwave_only=True),
-    WhirlpoolApkSensorDescription(key="microwave_cook_time_state", translation_key="microwave_cook_time_state", device_class=SensorDeviceClass.ENUM, options=list(MWO_COOK_TIME_STATE.values()), value_fn=_map_attr("Mwo_OperationStatusCookTimeState", MWO_COOK_TIME_STATE), cooking_only=True, microwave_only=True),
+    WhirlpoolApkSensorDescription(key="microwave_state", translation_key="microwave_state", icon="mdi:microwave-off", device_class=SensorDeviceClass.ENUM, options=list(MWO_STATE.values()), value_fn=_mwo_state, cooking_only=True, microwave_only=True),
+    WhirlpoolApkSensorDescription(key="microwave_cook_time_state", translation_key="microwave_cook_time_state", icon="mdi:timer-sand", device_class=SensorDeviceClass.ENUM, options=list(MWO_COOK_TIME_STATE.values()), value_fn=_map_attr("Mwo_OperationStatusCookTimeState", MWO_COOK_TIME_STATE), cooking_only=True, microwave_only=True),
     WhirlpoolApkSensorDescription(key="microwave_cook_time_remaining", translation_key="microwave_cook_time_remaining", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_mwo_remaining_seconds, cooking_only=True, microwave_only=True),
     WhirlpoolApkSensorDescription(key="microwave_cook_time_elapsed", translation_key="microwave_cook_time_elapsed", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_mwo_elapsed_seconds, cooking_only=True, microwave_only=True),
-    WhirlpoolApkSensorDescription(key="microwave_cook_time_set", translation_key="microwave_cook_time_set", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_int_legacy_attr("Mwo_TimeSetCookTimeSet"), cooking_only=True, microwave_only=True),
-    WhirlpoolApkSensorDescription(key="microwave_cook_power", translation_key="microwave_cook_power", native_unit_of_measurement=PERCENTAGE, value_fn=_mwo_cook_power, cooking_only=True, microwave_only=True),
+    WhirlpoolApkSensorDescription(key="microwave_cook_time_set", translation_key="microwave_cook_time_set", icon="mdi:timer", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_int_legacy_attr("Mwo_TimeSetCookTimeSet"), cooking_only=True, microwave_only=True),
+    WhirlpoolApkSensorDescription(key="microwave_cook_power", translation_key="microwave_cook_power", icon="mdi:lightning-bolt", native_unit_of_measurement=PERCENTAGE, value_fn=_mwo_cook_power, cooking_only=True, microwave_only=True),
     WhirlpoolApkSensorDescription(key="microwave_current_temperature", translation_key="microwave_current_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_temp_tenths_attr("Mwo_DisplayStatusDisplayTemp"), cooking_only=True, microwave_only=True),
     WhirlpoolApkSensorDescription(key="microwave_target_temperature", translation_key="microwave_target_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_temp_tenths_attr("Mwo_CycleSetTargetTemp"), cooking_only=True, microwave_only=True),
 )
@@ -453,6 +453,14 @@ class WhirlpoolApkSensor(WhirlpoolApkEntity, SensorEntity):
         return self.entity_description.native_unit_of_measurement
 
     @property
+    def icon(self) -> str | None:
+        if self.entity_description.key == "microwave_state":
+            return "mdi:microwave" if self.native_value in {"Setting", "Running", "Paused"} else "mdi:microwave-off"
+        if self.entity_description.key == "kitchen_timer_1_state":
+            return "mdi:timer-off" if self.native_value in {None, "Standby"} else "mdi:timer"
+        return self.entity_description.icon
+
+    @property
     def native_value(self) -> Any | None:
         value = self.entity_description.value_fn(self.flat_status)
         if self.entity_description.device_class == SensorDeviceClass.TEMPERATURE and isinstance(value, (int, float)):
@@ -469,6 +477,7 @@ class WhirlpoolApkSensor(WhirlpoolApkEntity, SensorEntity):
 class WhirlpoolRawStatusSensor(WhirlpoolApkEntity, SensorEntity):
     _attr_entity_registry_enabled_default = False
     _attr_translation_key = "raw_status"
+    _attr_icon = "mdi:list-status"
 
     def __init__(self, coordinator, appliance: Mapping[str, Any]) -> None:
         super().__init__(coordinator, appliance, "raw_status")
