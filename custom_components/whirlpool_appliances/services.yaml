@@ -178,7 +178,7 @@ set_attributes:
 
 set_oven_cook:
   name: Start oven cook cycle
-  description: Start or modify a Whirlpool legacy oven cavity cook cycle. Enter temperature in Celsius; use helpers/scripts if you want a Fahrenheit UI.
+  description: Start or modify a Whirlpool legacy oven cavity cook cycle. Temperature is Celsius. Optional cook time, delay time, and complete action are DDM-backed.
   fields:
     appliance_device:
       name: Appliance device
@@ -189,19 +189,22 @@ set_oven_cook:
           integration: whirlpool_appliances
     said:
       name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
+      description: Optional manual SAID override. Not needed if appliance device is selected.
       required: false
       selector:
         text:
     temperature:
+      name: Temperature
+      description: Target temperature in Celsius.
       required: true
       selector:
         number:
           min: 0
           max: 300
-          step: 1
+          step: 0.1
           unit_of_measurement: °C
     mode:
+      name: Mode
       required: false
       default: bake
       selector:
@@ -210,7 +213,109 @@ set_oven_cook:
             - bake
             - broil
             - keep_warm
+    cook_time_seconds:
+      name: Cook time
+      description: Optional oven cook time in seconds.
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 43140
+          step: 60
+          unit_of_measurement: s
+    delay_time_seconds:
+      name: Delay time
+      description: Optional delay start time in seconds.
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 43140
+          step: 60
+          unit_of_measurement: s
+    complete_action:
+      name: Complete action
+      description: What the oven should do when cook time completes.
+      required: false
+      default: turn_off
+      selector:
+        select:
+          options:
+            - turn_off
+            - keep_warm
+            - stay_on
     cavity:
+      name: Cavity
+      required: false
+      default: upper
+      selector:
+        select:
+          options:
+            - upper
+            - lower
+
+set_oven_frozen_bake:
+  name: Start Frozen Bake
+  description: Start a Whirlpool Frozen Bake automatic oven cycle. Temperature is Celsius and cook time is seconds.
+  fields:
+    appliance_device:
+      name: Appliance device
+      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
+      required: false
+      selector:
+        device:
+          integration: whirlpool_appliances
+    said:
+      name: SAID
+      description: Optional manual SAID override. Not needed if appliance device is selected.
+      required: false
+      selector:
+        text:
+    food:
+      name: Food
+      required: true
+      selector:
+        select:
+          options:
+            - pizza
+            - pie
+            - meals
+            - fries
+            - nuggets
+            - lasagna
+    temperature:
+      name: Temperature
+      description: Target temperature in Celsius.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 300
+          step: 0.1
+          unit_of_measurement: °C
+    cook_time_seconds:
+      name: Cook time
+      description: Required Frozen Bake cook time in seconds.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 43140
+          step: 60
+          unit_of_measurement: s
+    complete_action:
+      name: Complete action
+      description: What the oven should do when cook time completes.
+      required: false
+      default: turn_off
+      selector:
+        select:
+          options:
+            - turn_off
+            - keep_warm
+            - stay_on
+    cavity:
+      name: Cavity
       required: false
       default: upper
       selector:
