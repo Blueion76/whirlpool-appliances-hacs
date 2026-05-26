@@ -11,7 +11,20 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import WhirlpoolApkConfigEntry
 from .api import appliance_said
-from .entity import WhirlpoolApkEntity, attr_value, entity_name_from_key, find_key, has_legacy_attr, is_cooking_appliance, microwave_exists, oven_cavity_exists
+from .entity import (
+    WhirlpoolApkEntity,
+    attr_value,
+    entity_name_from_key,
+    find_key,
+    has_legacy_attr,
+    is_aircon_appliance,
+    is_cooking_appliance,
+    is_dishwasher_appliance,
+    is_laundry_appliance,
+    is_refrigeration_appliance,
+    microwave_exists,
+    oven_cavity_exists,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -19,6 +32,10 @@ class WhirlpoolApkBinarySensorDescription(BinarySensorEntityDescription):
     value_fn: Callable[[Mapping[str, Any]], bool | None]
     cooking_only: bool = False
     microwave_only: bool = False
+    laundry_only: bool = False
+    refrigeration_only: bool = False
+    aircon_only: bool = False
+    dishwasher_only: bool = False
 
 
 def _bool(raw: Any, *, truthy_extra: tuple[str, ...] = ()) -> bool | None:
@@ -105,6 +122,79 @@ def _problem(flat: Mapping[str, Any]) -> bool:
     return bool(raw)
 
 
+def _is_laundry_status(flat: Mapping[str, Any]) -> bool:
+    """Return true when status shape looks like a washer/dryer payload."""
+    return any(
+        find_key(flat, (key,)) is not None
+        for key in (
+            "washer.applianceState",
+            "dryer.applianceState",
+            "applianceState",
+            "machineState",
+            "washer.cycleName",
+            "dryer.cycleName",
+            "doorLockStatus",
+            "washer.doorStatus",
+            "dryer.doorStatus",
+            "cleanWasher",
+            "remoteStartEnable",
+            "hmiControlLockout",
+        )
+    )
+
+
+def _door_locked(flat: Mapping[str, Any]) -> bool | None:
+    raw = find_key(flat, ("washer.doorLockStatus", "dryer.doorLockStatus", "doorLockStatus"))
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return raw.strip().lower() in {"1", "true", "on", "yes", "locked", "lock"}
+    return bool(raw)
+
+
+def _remote_start_enabled(flat: Mapping[str, Any]) -> bool | None:
+    raw = find_key(flat, ("remoteStartEnable", "remoteStartEnabled", "remoteEnabled"))
+    return _bool(raw)
+
+
+def _clean_washer(flat: Mapping[str, Any]) -> bool | None:
+    raw = find_key(flat, ("washer.cleanWasher", "cleanWasher"))
+    return _bool(raw)
+
+
+def _control_lock_enabled(flat: Mapping[str, Any]) -> bool | None:
+    raw = find_key(flat, ("hmiControlLockout", "controlLock", "controlLockout"))
+    return _bool(raw)
+
+
+def _door_open_from_keys(flat: Mapping[str, Any]) -> bool | None:
+    raw = find_key(flat, ("doorStatus", "door.status", "refrigeratorDoorStatus", "freezerDoorStatus", "dishwasher.doorStatus"))
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return raw.strip().lower() in {"1", "true", "on", "yes", "open", "opened"}
+    return bool(raw)
+
+
+def _filter_problem(flat: Mapping[str, Any]) -> bool | None:
+    raw = find_key(flat, ("filterStatus", "waterFilterStatus", "airFilterStatus", "acFilterStatus"))
+    if raw in (None, ""):
+        return None
+    if isinstance(raw, str):
+        return raw.strip().lower() not in {"0", "ok", "good", "normal", "clean", "clear", "none", "false"}
+    return bool(raw)
+
+
+def _vacation_mode(flat: Mapping[str, Any]) -> bool | None:
+    raw = find_key(flat, ("vacationMode", "VacationMode", "refrigerator.vacationMode"))
+    return _bool(raw)
+
+
+def _ice_maker_on(flat: Mapping[str, Any]) -> bool | None:
+    raw = find_key(flat, ("iceMaker", "iceMakerEnabled", "iceMakerStatus"))
+    return _bool(raw)
+
+
 BINARY_DESCRIPTIONS: tuple[WhirlpoolApkBinarySensorDescription, ...] = (
     WhirlpoolApkBinarySensorDescription(key="online", translation_key="online", device_class=BinarySensorDeviceClass.CONNECTIVITY, value_fn=_bool_by_keys("Online", "online", "isOnline", "connected")),
     WhirlpoolApkBinarySensorDescription(key="door", translation_key="door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_door),
@@ -120,6 +210,16 @@ BINARY_DESCRIPTIONS: tuple[WhirlpoolApkBinarySensorDescription, ...] = (
     ),
     WhirlpoolApkBinarySensorDescription(key="running", translation_key="running", device_class=BinarySensorDeviceClass.RUNNING, value_fn=_running),
     WhirlpoolApkBinarySensorDescription(key="error", translation_key="error", icon="mdi:alert", device_class=BinarySensorDeviceClass.PROBLEM, value_fn=_problem),
+    WhirlpoolApkBinarySensorDescription(key="laundry_door_locked", translation_key="laundry_door_locked", icon="mdi:lock", value_fn=_door_locked, laundry_only=True),
+    WhirlpoolApkBinarySensorDescription(key="laundry_remote_start", translation_key="laundry_remote_start", icon="mdi:remote", value_fn=_remote_start_enabled, laundry_only=True),
+    WhirlpoolApkBinarySensorDescription(key="laundry_clean_washer", translation_key="laundry_clean_washer", icon="mdi:washing-machine-alert", value_fn=_clean_washer, laundry_only=True),
+    WhirlpoolApkBinarySensorDescription(key="laundry_control_lock", translation_key="laundry_control_lock", icon="mdi:lock", value_fn=_control_lock_enabled, laundry_only=True),
+    WhirlpoolApkBinarySensorDescription(key="dishwasher_door", translation_key="dishwasher_door", icon="mdi:dishwasher", device_class=BinarySensorDeviceClass.DOOR, value_fn=_door_open_from_keys, dishwasher_only=True),
+    WhirlpoolApkBinarySensorDescription(key="refrigerator_door", translation_key="refrigerator_door", icon="mdi:fridge", device_class=BinarySensorDeviceClass.DOOR, value_fn=_door_open_from_keys, refrigeration_only=True),
+    WhirlpoolApkBinarySensorDescription(key="refrigerator_filter_problem", translation_key="refrigerator_filter_problem", icon="mdi:air-filter", device_class=BinarySensorDeviceClass.PROBLEM, value_fn=_filter_problem, refrigeration_only=True),
+    WhirlpoolApkBinarySensorDescription(key="refrigerator_vacation_mode", translation_key="refrigerator_vacation_mode", icon="mdi:palm-tree", value_fn=_vacation_mode, refrigeration_only=True),
+    WhirlpoolApkBinarySensorDescription(key="ice_maker", translation_key="ice_maker", icon="mdi:snowflake", value_fn=_ice_maker_on, refrigeration_only=True),
+    WhirlpoolApkBinarySensorDescription(key="ac_filter_problem", translation_key="ac_filter_problem", icon="mdi:air-filter", device_class=BinarySensorDeviceClass.PROBLEM, value_fn=_filter_problem, aircon_only=True),
     WhirlpoolApkBinarySensorDescription(key="upper_door", translation_key="upper_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("OvenUpperCavity_OpStatusDoorOpen"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(key="lower_door", translation_key="lower_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("OvenLowerCavity_OpStatusDoorOpen"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(
@@ -151,8 +251,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
         cooking = is_cooking_appliance(appliance)
         flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
         has_mwo = microwave_exists(flat)
+        laundry = is_laundry_appliance(appliance) or _is_laundry_status(flat)
+        refrigeration = is_refrigeration_appliance(appliance)
+        aircon = is_aircon_appliance(appliance)
+        dishwasher = is_dishwasher_appliance(appliance)
         for desc in BINARY_DESCRIPTIONS:
             if desc.cooking_only and not cooking:
+                continue
+            if desc.laundry_only and not laundry:
+                continue
+            if desc.refrigeration_only and not refrigeration:
+                continue
+            if desc.aircon_only and not aircon:
+                continue
+            if desc.dishwasher_only and not dishwasher:
                 continue
             if cooking and desc.key in {
                 "door",

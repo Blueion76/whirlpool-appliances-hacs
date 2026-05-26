@@ -30,6 +30,15 @@ TOKEN_KEYS = ("access_token", "accessToken", "id_token", "idToken", "token", "me
 REFRESH_KEYS = ("refresh_token", "refreshToken")
 ACCOUNT_KEYS = ("accountId", "account_id", "id", "userId", "user_id")
 SAID_KEYS = ("said", "SAID", "serialNumber", "serial_number", "applianceSAID", "applianceId", "id")
+DDM_KEYS = (
+    "ddmKey",
+    "DDM_KEY",
+    "dataModelKey",
+    "DATA_MODEL_KEY",
+    "data_model_key",
+    "dataModel",
+    "DATA_MODEL",
+)
 
 
 class WhirlpoolApiError(Exception):
@@ -114,6 +123,7 @@ class WhirlpoolCloudClient:
         self._aws_credentials: AwsCredentials | None = None
         self._aws_credentials_identity_id: str | None = None
         self._aws_credentials_expiry_skew = 300
+        self._ddm_capability_cache: dict[str, Any] = {}
 
     @property
     def authenticated(self) -> bool:
@@ -473,6 +483,22 @@ class WhirlpoolCloudClient:
 
     async def get_status(self, said: str) -> Any:
         return await self.request("GET", f"/api/v1/appliance/status/{said}")
+
+    async def get_ddm_capabilities(self, ddm_key: str, *, force: bool = False) -> Any:
+        """Fetch and cache Whirlpool DDM/capability data for a data-model key.
+
+        The Whirlpool app downloads per-model capability data from
+        /api/v1/contents/all/{ddmKey}. Cache by DDM key because multiple
+        appliances/models can share the same capability file.
+        """
+        key = str(ddm_key or "").strip()
+        if not key:
+            raise WhirlpoolApiError("Missing DDM key")
+        if not force and key in self._ddm_capability_cache:
+            return self._ddm_capability_cache[key]
+        data = await self.request("GET", f"/api/v1/contents/all/{key}")
+        self._ddm_capability_cache[key] = data
+        return data
 
     async def get_appliance(self, said: str) -> Any:
         return await self.request("GET", f"/api/v1/appliance/{said}")
@@ -1031,6 +1057,12 @@ def _coerce_list(payload: Any, *, keys: tuple[str, ...]) -> list[dict[str, Any]]
 
 def appliance_said(appliance: Mapping[str, Any]) -> str | None:
     value = _first_value(appliance, SAID_KEYS)
+    return str(value) if value is not None else None
+
+
+def appliance_ddm_key(appliance: Mapping[str, Any]) -> str | None:
+    """Return the DDM/data-model key used by Whirlpool's capability endpoint."""
+    value = _first_value(appliance, DDM_KEYS)
     return str(value) if value is not None else None
 
 

@@ -72,6 +72,36 @@
       },
       "firmware_update_available": {
         "name": "Firmware update available"
+      },
+      "laundry_door_locked": {
+        "name": "Door locked"
+      },
+      "laundry_remote_start": {
+        "name": "Remote start"
+      },
+      "laundry_clean_washer": {
+        "name": "Clean washer reminder"
+      },
+      "laundry_control_lock": {
+        "name": "Control lock"
+      },
+      "dishwasher_door": {
+        "name": "Dishwasher door"
+      },
+      "refrigerator_door": {
+        "name": "Refrigerator door"
+      },
+      "refrigerator_filter_problem": {
+        "name": "Filter problem"
+      },
+      "refrigerator_vacation_mode": {
+        "name": "Vacation mode"
+      },
+      "ice_maker": {
+        "name": "Ice maker"
+      },
+      "ac_filter_problem": {
+        "name": "AC filter problem"
       }
     },
     "button": {
@@ -234,6 +264,60 @@
       },
       "microwave_cook_time_remaining": {
         "name": "Microwave cook time remaining"
+      },
+      "laundry_state": {
+        "name": "Laundry state"
+      },
+      "laundry_cycle": {
+        "name": "Laundry cycle"
+      },
+      "laundry_phase": {
+        "name": "Laundry phase"
+      },
+      "laundry_time_remaining": {
+        "name": "Laundry time remaining"
+      },
+      "laundry_end_time": {
+        "name": "Laundry end time"
+      },
+      "system_version": {
+        "name": "System version"
+      },
+      "dishwasher_state": {
+        "name": "Dishwasher state"
+      },
+      "dishwasher_cycle": {
+        "name": "Dishwasher cycle"
+      },
+      "dishwasher_phase": {
+        "name": "Dishwasher phase"
+      },
+      "dishwasher_time_remaining": {
+        "name": "Dishwasher time remaining"
+      },
+      "refrigerator_temperature": {
+        "name": "Refrigerator temperature"
+      },
+      "freezer_temperature": {
+        "name": "Freezer temperature"
+      },
+      "refrigerator_target_temperature": {
+        "name": "Refrigerator target temperature"
+      },
+      "freezer_target_temperature": {
+        "name": "Freezer target temperature"
+      },
+      "refrigerator_filter_status": {
+        "name": "Filter status"
+      },
+      "ac_mode": {
+        "name": "AC mode"
+      },
+      "ac_fan_speed": {
+        "name": "AC fan speed"
+      },
+      "cooktop_state": {
+        "name": "Cooktop state"
       }
     },
     "switch": {

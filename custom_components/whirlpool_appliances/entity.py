@@ -10,7 +10,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import appliance_name, appliance_said
+from .api import appliance_ddm_key, appliance_name, appliance_said
 from .const import DOMAIN
 from .coordinator import WhirlpoolApkCoordinator
 
@@ -202,7 +202,8 @@ def appliance_haystack(appliance: Mapping[str, Any]) -> str:
 
 def is_washer_appliance(appliance: Mapping[str, Any]) -> bool:
     """Return true for Whirlpool washer data models."""
-    return "washer" in appliance_haystack(appliance) or "laundry" in appliance_haystack(appliance) and "dryer" not in appliance_haystack(appliance)
+    haystack = appliance_haystack(appliance)
+    return ("washer" in haystack or "laundry" in haystack) and "dryer" not in haystack
 
 
 def is_dryer_appliance(appliance: Mapping[str, Any]) -> bool:
@@ -210,16 +211,45 @@ def is_dryer_appliance(appliance: Mapping[str, Any]) -> bool:
     return "dryer" in appliance_haystack(appliance)
 
 
+def is_laundry_appliance(appliance: Mapping[str, Any]) -> bool:
+    """Return true for washer/dryer/laundry data models."""
+    haystack = appliance_haystack(appliance)
+    return any(term in haystack for term in ("washer", "dryer", "laundry"))
+
+
 def is_refrigerator_appliance(appliance: Mapping[str, Any]) -> bool:
     """Return true for Whirlpool refrigerator data models."""
     haystack = appliance_haystack(appliance)
-    return any(term in haystack for term in ("refrigerator", "fridge", "freezer", "ted_refrigerator"))
+    return any(term in haystack for term in ("refrigerator", "fridge", "ted_refrigerator"))
+
+
+def is_freezer_appliance(appliance: Mapping[str, Any]) -> bool:
+    """Return true for standalone freezer or freezer-capable refrigeration models."""
+    haystack = appliance_haystack(appliance)
+    return "freezer" in haystack
+
+
+def is_refrigeration_appliance(appliance: Mapping[str, Any]) -> bool:
+    """Return true for refrigerators/freezers."""
+    return is_refrigerator_appliance(appliance) or is_freezer_appliance(appliance)
 
 
 def is_aircon_appliance(appliance: Mapping[str, Any]) -> bool:
     """Return true for Whirlpool air conditioner data models."""
     haystack = appliance_haystack(appliance)
     return any(term in haystack for term in ("airconditioner", "air conditioner", "aircon", "ac_"))
+
+
+def is_dishwasher_appliance(appliance: Mapping[str, Any]) -> bool:
+    """Return true for Whirlpool dishwasher data models."""
+    haystack = appliance_haystack(appliance)
+    return any(term in haystack for term in ("dishwasher", "dish_washer", "dish washer", "dishstatus"))
+
+
+def is_cooktop_appliance(appliance: Mapping[str, Any]) -> bool:
+    """Return true for Whirlpool cooktop data models."""
+    haystack = appliance_haystack(appliance)
+    return "cooktop" in haystack or "cook_top" in haystack
 
 
 def has_legacy_attr(flat: Mapping[str, Any], attr: str) -> bool:
@@ -337,6 +367,30 @@ def _has_substantive_status(status: Any) -> bool:
     return any(key not in metadata_keys for key in status)
 
 
+def appliance_metadata_field(
+    appliance: Mapping[str, Any],
+    status: Mapping[str, Any] | None,
+    keys: tuple[str, ...],
+) -> Any | None:
+    """Return a metadata value from appliance first, then status."""
+    value = first_value(appliance, keys)
+    if value not in (None, ""):
+        return value
+    if isinstance(status, Mapping):
+        return first_value(status, keys)
+    return None
+
+
+def appliance_category(appliance: Mapping[str, Any], status: Mapping[str, Any] | None = None) -> str | None:
+    """Return normalized category/type metadata for this appliance."""
+    value = appliance_metadata_field(
+        appliance,
+        status,
+        ("CATEGORY_NAME", "categoryName", "category", "Category", "applianceCategory", "applianceType", "type"),
+    )
+    return str(value) if value not in (None, "") else None
+
+
 class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
     """Base entity for one Whirlpool appliance."""
 
@@ -349,19 +403,35 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
         self.entity_suffix = suffix
         self._unavailable_logged = False
         self._attr_unique_id = f"{self.said}_{suffix}"
-        model = first_value(
+        initial_status = {}
+        model = appliance_metadata_field(
             appliance,
-            ("MODEL_NO", "modelNumber", "model_number", "model", "thingTypeName", "DATA_MODEL_KEY", "DATA_MODEL"),
+            initial_status,
+            ("MODEL_NO", "ModelNumber", "modelNumber", "model_number", "model", "thingTypeName", "DATA_MODEL_KEY", "DATA_MODEL"),
         )
-        serial = first_value(appliance, ("SERIAL", "serialNumber", "serial"))
+        serial = appliance_metadata_field(appliance, initial_status, ("SERIAL", "SerialNumber", "serialNumber", "serial"))
+        ddm_key = appliance_ddm_key(appliance) or first_value(appliance, ("DATA_MODEL_KEY", "dataModelKey"))
+        cc_uri = first_value(appliance, ("ccuri", "CC_URI"))
+        category = appliance_category(appliance)
+
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self.said)},
             name=appliance_name(appliance),
             manufacturer=self._manufacturer(appliance),
             model=str(model or ""),
+            model_id=str(model or ""),
             serial_number=str(serial or ""),
-            hw_version=self.said,
+            hw_version=f"SAID: {self.said}",
+            sw_version=str(cc_uri or ddm_key or ""),
         )
+        self._attr_extra_state_attributes = {
+            "said": self.said,
+            "ddm_key": ddm_key,
+            "cc_uri": cc_uri,
+            "category": category,
+            "model": str(model or "") or None,
+            "serial_number": str(serial or "") or None,
+        }
 
     @property
     def client(self):

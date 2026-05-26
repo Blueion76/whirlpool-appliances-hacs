@@ -17,7 +17,21 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import WhirlpoolApkConfigEntry
 from .api import appliance_said
 from .const import CONF_EXPOSE_RAW_SENSORS
-from .entity import WhirlpoolApkEntity, attr_value, celsius_to_unit, entity_name_from_key, find_key, is_cooking_appliance, microwave_exists, oven_cavity_exists
+from .entity import (
+    WhirlpoolApkEntity,
+    attr_value,
+    celsius_to_unit,
+    entity_name_from_key,
+    find_key,
+    is_aircon_appliance,
+    is_cooktop_appliance,
+    is_cooking_appliance,
+    is_dishwasher_appliance,
+    is_laundry_appliance,
+    is_refrigeration_appliance,
+    microwave_exists,
+    oven_cavity_exists,
+)
 
 
 CAVITY_STATE = {"0": "Standby", "1": "Preheating", "2": "Cooking", "4": "Not Present"}
@@ -33,11 +47,50 @@ COOK_MODE = {
 }
 TIMER_STATE = {"0": "Standby", "1": "Running", "3": "Completed"}
 MACHINE_STATE = {"0": "Standby", "1": "Setting", "2": "Delay Countdown", "3": "Delay Paused", "4": "Smart Delay", "5": "Smart Grid Pause", "6": "Pause", "7": "Running Main Cycle", "8": "Running Post Cycle", "9": "Exception", "10": "Complete", "11": "Power Failure", "12": "Service Diagnostic Mode", "13": "Factory Diagnostic Mode", "14": "Life Test", "15": "Customer Focus Mode", "16": "Demo Mode", "17": "Hard Stop Or Error", "18": "System Initialize", "19": "Cancelled"}
+LAUNDRY_STATE_EXTRA = {
+    "cycle_filling": "Cycle Filling",
+    "cycle_rinsing": "Cycle Rinsing",
+    "cycle_sensing": "Cycle Sensing",
+    "cycle_soaking": "Cycle Soaking",
+    "cycle_spinning": "Cycle Spinning",
+    "cycle_washing": "Cycle Washing",
+    "door_open": "Door Open",
+}
+LAUNDRY_STATE_OPTIONS = list(MACHINE_STATE.values()) + list(LAUNDRY_STATE_EXTRA.values())
 # Observed on WOC54EC0HS00 combo models. State 4 is the idle/ready value
 # returned after a microwave operation finishes, so expose it as idle instead
 # of leaving the entity as a raw unknown code.
 MWO_STATE = {"0": "Standby", "1": "Setting", "2": "Running", "3": "Paused", "4": "Idle"}
 MWO_COOK_TIME_STATE = {"0": "Standby", "1": "Running", "2": "Paused", "3": "Complete"}
+
+DISHWASHER_STATE = {
+    "0": "Standby",
+    "1": "Setting",
+    "2": "Delay Countdown",
+    "3": "Delay Paused",
+    "6": "Paused",
+    "7": "Running",
+    "8": "Drying",
+    "9": "Exception",
+    "10": "Complete",
+    "17": "Error",
+}
+
+AC_MODE = {
+    "0": "Off",
+    "1": "Cool",
+    "2": "Heat",
+    "3": "Fan",
+    "4": "Dry",
+    "5": "Auto",
+}
+
+DOOR_STATE = {
+    "0": "Closed",
+    "1": "Open",
+    "closed": "Closed",
+    "open": "Open",
+}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -45,6 +98,11 @@ class WhirlpoolApkSensorDescription(SensorEntityDescription):
     value_fn: Callable[[Mapping[str, Any]], Any | None]
     cooking_only: bool = False
     microwave_only: bool = False
+    laundry_only: bool = False
+    refrigeration_only: bool = False
+    aircon_only: bool = False
+    dishwasher_only: bool = False
+    cooktop_only: bool = False
 
 
 def _by_keys(*keys: str) -> Callable[[Mapping[str, Any]], Any | None]:
@@ -324,6 +382,235 @@ def _active_fault(flat: Mapping[str, Any]) -> Any | None:
     return value
 
 
+def _normalized_str(raw: Any) -> str | None:
+    if raw in (None, ""):
+        return None
+    return str(raw).strip()
+
+
+def _is_laundry_status(flat: Mapping[str, Any]) -> bool:
+    """Return true when status shape looks like a washer/dryer payload."""
+    if find_key(flat, ("washer.applianceState", "dryer.applianceState", "applianceState", "machineState")) is not None:
+        haystack = " ".join(str(k).lower() for k in flat)
+        if any(token in haystack for token in ("washer", "dryer", "laundry", "cycle", "doorlockstatus")):
+            return True
+    return any(
+        find_key(flat, (key,)) is not None
+        for key in (
+            "washer.cycleName",
+            "dryer.cycleName",
+            "cycleName",
+            "currentPhase",
+            "washer.cycleTime.time",
+            "dryer.cycleTime.time",
+            "doorLockStatus",
+            "cleanWasher",
+        )
+    )
+
+
+def _laundry_state(flat: Mapping[str, Any]) -> Any | None:
+    """Official-HA-style washer/dryer state with phase refinement."""
+    door = find_key(flat, ("washer.doorStatus", "dryer.doorStatus", "doorStatus"))
+    if isinstance(door, str) and door.lower() == "open":
+        return LAUNDRY_STATE_EXTRA["door_open"]
+
+    state = find_key(flat, ("washer.applianceState", "dryer.applianceState", "applianceState"))
+    if isinstance(state, str):
+        normalized = state.strip().lower()
+        cloud_map = {
+            "standby": "Standby",
+            "idle": "Standby",
+            "off": "Standby",
+            "setting": "Setting",
+            "programming": "Setting",
+            "delayed": "Delay Countdown",
+            "delay_countdown": "Delay Countdown",
+            "paused": "Pause",
+            "pause": "Pause",
+            "running": "Running Main Cycle",
+            "complete": "Complete",
+            "completed": "Complete",
+            "fault": "Hard Stop Or Error",
+        }
+        mapped = cloud_map.get(normalized)
+        if mapped:
+            if mapped == "Running Main Cycle":
+                phase = _laundry_cycle_phase_state(flat)
+                return phase or mapped
+            return mapped
+        return state.replace("_", " ").title()
+
+    numeric_state = find_key(flat, ("machineState", "washer.machineState", "dryer.machineState", "Cavity_CycleStatusMachineState"))
+    mapped = MACHINE_STATE.get(str(numeric_state)) if numeric_state is not None else None
+    if mapped == "Running Main Cycle":
+        phase = _laundry_cycle_phase_state(flat)
+        return phase or mapped
+    return mapped
+
+
+def _laundry_cycle_phase_state(flat: Mapping[str, Any]) -> str | None:
+    for key, state in (
+        ("cycleStatusFilling", "cycle_filling"),
+        ("cycleStatusRinsing", "cycle_rinsing"),
+        ("cycleStatusSensing", "cycle_sensing"),
+        ("cycleStatusSoaking", "cycle_soaking"),
+        ("cycleStatusSpinning", "cycle_spinning"),
+        ("cycleStatusWashing", "cycle_washing"),
+    ):
+        raw = find_key(flat, (key, f"washer.{key}", f"dryer.{key}"))
+        if str(raw).lower() in {"1", "true", "on", "yes"}:
+            return LAUNDRY_STATE_EXTRA[state]
+
+    phase = find_key(flat, ("washer.currentPhase", "dryer.currentPhase", "currentPhase", "cyclePhase"))
+    if isinstance(phase, str) and phase:
+        return phase.replace("_", " ").title()
+    return None
+
+
+def _laundry_time_remaining_seconds(flat: Mapping[str, Any]) -> int | None:
+    raw = find_key(
+        flat,
+        (
+            "washer.cycleTime.time",
+            "dryer.cycleTime.time",
+            "cycleTime.time",
+            "timeRemaining",
+            "remainingTime",
+            "cycleTimeRemaining",
+        ),
+    )
+    value = _int_value(raw)
+    if value is None or value < 0:
+        return None
+    # ThingShield cycleTime.time is seconds. Some legacy payloads report minutes.
+    if value > 14 * 24 * 60 * 60:
+        return None
+    return value
+
+
+def _laundry_end_time(flat: Mapping[str, Any]) -> Any | None:
+    complete = _int_value(find_key(flat, ("washer.cycleTime.timeComplete", "dryer.cycleTime.timeComplete", "cycleTime.timeComplete")))
+    state = str(find_key(flat, ("washer.cycleTime.state", "dryer.cycleTime.state", "cycleTime.state")) or "").lower()
+    if complete and state in {"running", "paused", "pause"}:
+        try:
+            return dt_util.utc_from_timestamp(complete)
+        except (OverflowError, OSError, ValueError):
+            return None
+
+    seconds = _laundry_time_remaining_seconds(flat)
+    if seconds is None:
+        return None
+    return dt_util.utcnow() + timedelta(seconds=seconds)
+
+
+def _map_value(raw: Any, mapping: Mapping[str, str]) -> str | None:
+    if raw in (None, ""):
+        return None
+    return mapping.get(str(raw), str(raw).replace("_", " ").title())
+
+
+def _first_key_value(flat: Mapping[str, Any], *keys: str) -> Any | None:
+    for key in keys:
+        value = find_key(flat, (key,))
+        if value not in (None, "", "0"):
+            return value
+    return None
+
+
+def _generic_temperature_value(flat: Mapping[str, Any], *keys: str) -> float | None:
+    raw = _first_key_value(flat, *keys)
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if value == 0:
+        return None
+    # Some legacy values are tenths of a degree. Avoid converting normal temp
+    # ranges; only collapse clearly scaled values.
+    if abs(value) > 200:
+        value = value / 10
+    return value
+
+
+def _dishwasher_state(flat: Mapping[str, Any]) -> str | None:
+    raw = find_key(flat, ("dishwasher.applianceState", "dishwasher.machineState", "DishStatusMachineState", "machineState", "applianceState"))
+    if isinstance(raw, str) and not raw.isdigit():
+        return raw.replace("_", " ").title()
+    return _map_value(raw, DISHWASHER_STATE)
+
+
+def _dishwasher_time_remaining_seconds(flat: Mapping[str, Any]) -> int | None:
+    raw = find_key(flat, ("dishwasher.cycleTime.time", "cycleTime.time", "timeRemaining", "cycleTimeRemaining"))
+    value = _int_value(raw)
+    if value is None or value < 0:
+        return None
+    return value
+
+
+def _refrigerator_temperature(flat: Mapping[str, Any]) -> float | None:
+    return _generic_temperature_value(
+        flat,
+        "refrigeratorTemperature",
+        "fridgeTemperature",
+        "refrigerator.currentTemperature",
+        "refrigerator.temp",
+        "RefrigeratorCavity_Temperature",
+        "RefrigeratorCavityTemp",
+    )
+
+
+def _freezer_temperature(flat: Mapping[str, Any]) -> float | None:
+    return _generic_temperature_value(
+        flat,
+        "freezerTemperature",
+        "freezer.currentTemperature",
+        "freezer.temp",
+        "FreezerCavity_Temperature",
+        "FreezerCavityTemp",
+    )
+
+
+def _refrigerator_target_temperature(flat: Mapping[str, Any]) -> float | None:
+    return _generic_temperature_value(
+        flat,
+        "refrigeratorTargetTemperature",
+        "fridgeTargetTemperature",
+        "refrigerator.setTemperature",
+        "RefrigeratorCavity_TargetTemp",
+    )
+
+
+def _freezer_target_temperature(flat: Mapping[str, Any]) -> float | None:
+    return _generic_temperature_value(
+        flat,
+        "freezerTargetTemperature",
+        "freezer.setTemperature",
+        "FreezerCavity_TargetTemp",
+    )
+
+
+def _ac_mode(flat: Mapping[str, Any]) -> str | None:
+    raw = find_key(flat, ("ac.mode", "mode", "operationMode", "airconMode", "airConditionerMode"))
+    return _map_value(raw, AC_MODE)
+
+
+def _ac_fan_speed(flat: Mapping[str, Any]) -> str | None:
+    raw = find_key(flat, ("fanSpeed", "fan_speed", "ac.fanSpeed", "airconFanSpeed"))
+    if raw in (None, ""):
+        return None
+    return str(raw).replace("_", " ").title()
+
+
+def _cooktop_state(flat: Mapping[str, Any]) -> str | None:
+    raw = find_key(flat, ("cooktopState", "cooktop.state", "machineState", "applianceState"))
+    if raw in (None, ""):
+        return None
+    return str(raw).replace("_", " ").title()
+
+
 def _generic_state(flat: Mapping[str, Any]) -> Any | None:
     raw = find_key(flat, ("state", "machineState", "applianceState", "Cavity_CycleStatusMachineState", "cavityState", "cycleStatus"))
     if raw is not None:
@@ -370,6 +657,24 @@ SENSOR_DESCRIPTIONS: tuple[WhirlpoolApkSensorDescription, ...] = (
     WhirlpoolApkSensorDescription(key="target_temperature", translation_key="target_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_generic_target_temp),
     WhirlpoolApkSensorDescription(key="humidity", translation_key="humidity", device_class=SensorDeviceClass.HUMIDITY, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=PERCENTAGE, value_fn=_by_keys("humidity", "currentHumidity")),
     WhirlpoolApkSensorDescription(key="filter_status", translation_key="filter_status", value_fn=_by_keys("filterStatus", "acFilterStatus")),
+    WhirlpoolApkSensorDescription(key="laundry_state", translation_key="laundry_state", icon="mdi:washing-machine", device_class=SensorDeviceClass.ENUM, options=LAUNDRY_STATE_OPTIONS, value_fn=_laundry_state, laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_cycle", translation_key="laundry_cycle", icon="mdi:washing-machine", value_fn=_by_keys("washer.cycleName", "dryer.cycleName", "cycleName", "cycle", "currentCycle"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_phase", translation_key="laundry_phase", icon="mdi:progress-clock", value_fn=_by_keys("washer.currentPhase", "dryer.currentPhase", "currentPhase", "cyclePhase"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_time_remaining", translation_key="laundry_time_remaining", icon="mdi:timer-outline", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_laundry_time_remaining_seconds, laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_end_time", translation_key="laundry_end_time", icon="mdi:progress-clock", device_class=SensorDeviceClass.TIMESTAMP, value_fn=_laundry_end_time, laundry_only=True),
+    WhirlpoolApkSensorDescription(key="system_version", translation_key="system_version", icon="mdi:chip", value_fn=_by_keys("systemVersion", "firmwareVersion", "softwareVersion"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="dishwasher_state", translation_key="dishwasher_state", icon="mdi:dishwasher", device_class=SensorDeviceClass.ENUM, options=list(DISHWASHER_STATE.values()), value_fn=_dishwasher_state, dishwasher_only=True),
+    WhirlpoolApkSensorDescription(key="dishwasher_cycle", translation_key="dishwasher_cycle", icon="mdi:dishwasher", value_fn=_by_keys("dishwasher.cycleName", "cycleName", "cycle", "selectedCycle"), dishwasher_only=True),
+    WhirlpoolApkSensorDescription(key="dishwasher_phase", translation_key="dishwasher_phase", icon="mdi:progress-clock", value_fn=_by_keys("dishwasher.currentPhase", "currentPhase", "cyclePhase", "DishCycleState"), dishwasher_only=True),
+    WhirlpoolApkSensorDescription(key="dishwasher_time_remaining", translation_key="dishwasher_time_remaining", icon="mdi:timer-outline", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_dishwasher_time_remaining_seconds, dishwasher_only=True),
+    WhirlpoolApkSensorDescription(key="refrigerator_temperature", translation_key="refrigerator_temperature", icon="mdi:fridge", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_refrigerator_temperature, refrigeration_only=True),
+    WhirlpoolApkSensorDescription(key="freezer_temperature", translation_key="freezer_temperature", icon="mdi:snowflake", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_freezer_temperature, refrigeration_only=True),
+    WhirlpoolApkSensorDescription(key="refrigerator_target_temperature", translation_key="refrigerator_target_temperature", icon="mdi:fridge", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_refrigerator_target_temperature, refrigeration_only=True),
+    WhirlpoolApkSensorDescription(key="freezer_target_temperature", translation_key="freezer_target_temperature", icon="mdi:snowflake", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_freezer_target_temperature, refrigeration_only=True),
+    WhirlpoolApkSensorDescription(key="refrigerator_filter_status", translation_key="refrigerator_filter_status", icon="mdi:air-filter", value_fn=_by_keys("waterFilterStatus", "airFilterStatus", "filterStatus"), refrigeration_only=True),
+    WhirlpoolApkSensorDescription(key="ac_mode", translation_key="ac_mode", icon="mdi:air-conditioner", device_class=SensorDeviceClass.ENUM, options=list(AC_MODE.values()), value_fn=_ac_mode, aircon_only=True),
+    WhirlpoolApkSensorDescription(key="ac_fan_speed", translation_key="ac_fan_speed", icon="mdi:fan", value_fn=_ac_fan_speed, aircon_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_state", translation_key="cooktop_state", icon="mdi:stove", value_fn=_cooktop_state, cooktop_only=True),
     WhirlpoolApkSensorDescription(key="fault_code", translation_key="fault_code", icon="mdi:alert", value_fn=_active_fault),
     WhirlpoolApkSensorDescription(key="cook_mode", translation_key="cook_mode", icon="mdi:chef-hat", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=_generic_cook_mode, cooking_only=True),
     WhirlpoolApkSensorDescription(key="upper_cavity_state", translation_key="upper_cavity_state", icon="mdi:stove", device_class=SensorDeviceClass.ENUM, options=list(CAVITY_STATE.values()), value_fn=_map_attr("OvenUpperCavity_OpStatusState", CAVITY_STATE), cooking_only=True),
@@ -404,8 +709,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
         cooking = is_cooking_appliance(appliance)
         flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
         has_mwo = microwave_exists(flat)
+        laundry = is_laundry_appliance(appliance) or _is_laundry_status(flat)
+        refrigeration = is_refrigeration_appliance(appliance)
+        aircon = is_aircon_appliance(appliance)
+        dishwasher = is_dishwasher_appliance(appliance)
+        cooktop = is_cooktop_appliance(appliance)
         for desc in SENSOR_DESCRIPTIONS:
             if desc.cooking_only and not cooking:
+                continue
+            if desc.laundry_only and not laundry:
+                continue
+            if desc.refrigeration_only and not refrigeration:
+                continue
+            if desc.aircon_only and not aircon:
+                continue
+            if desc.dishwasher_only and not dishwasher:
+                continue
+            if desc.cooktop_only and not cooktop:
+                continue
+            if (laundry or dishwasher) and desc.key in {"state", "cycle", "phase", "time_remaining", "end_time"}:
+                # Laundry-specific sensors below use the official HA state map
+                # and ThingShield payload paths, so avoid generic duplicates.
                 continue
             if cooking and desc.key in {
                 "state",

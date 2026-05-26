@@ -75,7 +75,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
             # Oven target temperature is exposed through the climate entity.
             entities.append(WhirlpoolKitchenTimerNumber(coordinator, appliance))
             continue
-        entities.append(WhirlpoolTargetTemperatureNumber(coordinator, appliance, None))
+        # Phase 7 safety guard: do not expose generic writable setpoints for
+        # appliances we cannot test. Read-only temperature sensors are still
+        # created by sensor.py; writable controls should be added per category
+        # only after DDM/captures confirm the command payload.
+        continue
     async_add_entities(entities)
 
 

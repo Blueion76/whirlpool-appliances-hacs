@@ -271,6 +271,18 @@ def _register_services(hass: HomeAssistant) -> None:
     async def refresh(call: ServiceCall) -> None:
         await _first_coordinator(hass).async_request_refresh()
 
+    async def refresh_ddm_capabilities(call: ServiceCall) -> dict[str, Any]:
+        coordinator = _first_coordinator(hass)
+        await coordinator.async_fetch_ddm_capabilities(force=True)
+        data = dict(coordinator.data or {})
+        data["ddm_capabilities"] = coordinator._ddm_capabilities
+        data["ddm_errors"] = coordinator._ddm_errors
+        coordinator.async_set_updated_data(data)
+        return _service_result({
+            "ddm_keys": list(coordinator._ddm_capabilities),
+            "errors": coordinator._ddm_errors,
+        })
+
     async def appliance_function(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         path_values = dict(call.data.get("path_values") or {})
@@ -416,6 +428,12 @@ def _register_services(hass: HomeAssistant) -> None:
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(DOMAIN, "refresh", refresh)
+    hass.services.async_register(
+        DOMAIN,
+        "refresh_ddm_capabilities",
+        refresh_ddm_capabilities,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
     hass.services.async_register(
         DOMAIN,
         "appliance_function",

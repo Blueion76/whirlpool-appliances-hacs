@@ -27,16 +27,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
     for appliance in (coordinator.data or {}).get("appliances", []):
         if not appliance_said(appliance):
             continue
-        if is_cooking_appliance(appliance):
-            flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
-            if oven_cavity_exists(flat, "upper"):
-                entities.append(WhirlpoolCavityLight(coordinator, appliance, "upper"))
-            if oven_cavity_exists(flat, "lower"):
-                entities.append(WhirlpoolCavityLight(coordinator, appliance, "lower"))
-            if microwave_exists(flat):
-                entities.append(WhirlpoolCavityLight(coordinator, appliance, "microwave"))
-        else:
-            entities.append(WhirlpoolCavityLight(coordinator, appliance, None))
+        if not is_cooking_appliance(appliance):
+            # Do not expose generic writable light controls for unknown appliance
+            # categories. Add them later only when diagnostics/DDM or captures
+            # confirm the exact writable attribute.
+            continue
+        flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
+        if oven_cavity_exists(flat, "upper"):
+            entities.append(WhirlpoolCavityLight(coordinator, appliance, "upper"))
+        if oven_cavity_exists(flat, "lower"):
+            entities.append(WhirlpoolCavityLight(coordinator, appliance, "lower"))
+        if microwave_exists(flat):
+            entities.append(WhirlpoolCavityLight(coordinator, appliance, "microwave"))
     async_add_entities(entities)
 
 

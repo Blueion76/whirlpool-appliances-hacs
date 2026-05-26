@@ -76,6 +76,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
         flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
         has_mwo = microwave_exists(flat)
         for desc in SWITCHES:
+            # Do not expose the generic Power switch for ovens / microwave combos,
+            # or for unconfirmed non-cooking categories. Read-only support comes
+            # first; writable controls are added only after captures/DDM confirm
+            # exact command payloads.
+            if desc.non_cooking_only:
+                continue
             # Do not expose the generic Power switch for ovens / microwave combos.
             # Whirlpool legacy cooking products cannot be safely "powered on" without
             # an explicit mode and target temperature, so the generic switch caused

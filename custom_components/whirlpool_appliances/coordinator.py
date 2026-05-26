@@ -8,8 +8,9 @@ from typing import Any
 
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import WhirlpoolApiError, WhirlpoolCloudClient, appliance_said
+from .api import WhirlpoolApiError, WhirlpoolCloudClient, appliance_ddm_key, appliance_said
 from .api_mqtt import WhirlpoolThingShieldManager
+from .capabilities import parse_ddm_capabilities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,6 +34,103 @@ def _has_substantive_state(state: Any) -> bool:
     return any(key not in metadata_keys for key in state)
 
 
+def _find_ddm_key_from_status(status: Any) -> str | None:
+    """Best-effort DDM key lookup from a raw status/appliance snapshot."""
+    if not isinstance(status, Mapping):
+        return None
+
+    candidates = (
+        "ddmKey",
+        "DDM_KEY",
+        "dataModelKey",
+        "DATA_MODEL_KEY",
+        "data_model_key",
+        "dataModel",
+        "DATA_MODEL",
+    )
+
+    def walk(value: Any) -> str | None:
+        if isinstance(value, Mapping):
+            for key in candidates:
+                found = value.get(key)
+                if found not in (None, "", "0", 0):
+                    return str(found)
+            # Legacy status sometimes nests metadata under an Appliance object.
+            for nested in value.values():
+                found = walk(nested)
+                if found:
+                    return found
+        elif isinstance(value, list):
+            for item in value:
+                found = walk(item)
+                if found:
+                    return found
+        return None
+
+    return walk(status)
+
+
+def _appliance_category(appliance: Mapping[str, Any], status: Any | None = None) -> str | None:
+    """Return the most useful category/type string for diagnostics."""
+    keys = (
+        "CATEGORY_NAME",
+        "categoryName",
+        "category",
+        "Category",
+        "applianceCategory",
+        "applianceType",
+        "type",
+    )
+    for key in keys:
+        value = appliance.get(key)
+        if value not in (None, "", "0", 0):
+            return str(value)
+
+    if isinstance(status, Mapping):
+        for key in keys:
+            value = status.get(key)
+            if value not in (None, "", "0", 0):
+                return str(value)
+    return None
+
+
+def _appliance_metadata(appliance: Mapping[str, Any], status: Any | None = None) -> dict[str, Any]:
+    """Return normalized appliance metadata used by device info and diagnostics."""
+    status_map = status if isinstance(status, Mapping) else {}
+    return {
+        "said": appliance_said(appliance),
+        "ddm_key": appliance_ddm_key(appliance) or _find_ddm_key_from_status(status),
+        "category": _appliance_category(appliance, status),
+        "model": (
+            appliance.get("MODEL_NO")
+            or appliance.get("modelNumber")
+            or appliance.get("model_number")
+            or appliance.get("model")
+            or status_map.get("ModelNumber")
+        ),
+        "serial": (
+            appliance.get("SERIAL")
+            or appliance.get("serialNumber")
+            or appliance.get("serial")
+            or status_map.get("SerialNumber")
+        ),
+        "ccuri": (
+            appliance.get("ccuri")
+            or appliance.get("CC_URI")
+            or status_map.get("ccuri")
+            or status_map.get("CC_URI")
+        ),
+        "data_model_key": (
+            appliance.get("DATA_MODEL_KEY")
+            or appliance.get("dataModelKey")
+            or status_map.get("DATA_MODEL_KEY")
+        ),
+        "source": appliance.get("source"),
+        "thing_shield": bool(appliance.get("thingShield")),
+    }
+
+
+
 class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Keep Whirlpool appliance list and status data fresh.
 
@@ -52,6 +150,9 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._thing_started = False
         self._latest_appliances: list[dict[str, Any]] = []
         self._latest_statuses: dict[str, Any] = {}
+        self._ddm_capabilities: dict[str, Any] = {}
+        self._ddm_errors: dict[str, str] = {}
+        self._appliance_metadata: dict[str, dict[str, Any]] = {}
 
     async def async_start_push(self) -> None:
         """Start ThingShield MQTT subscriptions for discovered TS_SAID devices."""
@@ -76,6 +177,73 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if said not in self.thing_manager.runtimes:
             await self.async_start_push()
         return await self.thing_manager.publish_command(said, command, payload)
+
+    async def async_fetch_ddm_capabilities(
+        self,
+        appliances: list[dict[str, Any]] | None = None,
+        statuses: Mapping[str, Any] | None = None,
+        *,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        """Fetch DDM/capability payloads for all discovered appliance data-model keys."""
+        appliances = appliances if appliances is not None else self._latest_appliances
+        statuses = statuses if statuses is not None else self._latest_statuses
+
+        ddm_keys: dict[str, dict[str, Any]] = {}
+        for appliance in appliances:
+            said = appliance_said(appliance)
+            status = statuses.get(said) if said and isinstance(statuses, Mapping) else None
+            key = appliance_ddm_key(appliance) or _find_ddm_key_from_status(status)
+            if not key:
+                continue
+            ddm_keys.setdefault(
+                key,
+                {
+                    "ddm_key": key,
+                    "appliance_saids": [],
+                    "category": _appliance_category(appliance, status),
+                    "model": (
+                        appliance.get("MODEL_NO")
+                        or appliance.get("modelNumber")
+                        or appliance.get("model")
+                    ),
+                },
+            )
+            if said and said not in ddm_keys[key]["appliance_saids"]:
+                ddm_keys[key]["appliance_saids"].append(said)
+
+        for key, metadata in ddm_keys.items():
+            if not force and key in self._ddm_capabilities:
+                continue
+            try:
+                payload = await self.client.get_ddm_capabilities(key, force=force)
+            except WhirlpoolApiError as err:
+                self._ddm_errors[key] = str(err)
+                _LOGGER.debug("DDM capability fetch failed for %s: %s", key, err)
+                continue
+            self._ddm_capabilities[key] = {
+                "metadata": metadata,
+                "parsed": parse_ddm_capabilities(payload),
+                "payload": payload,
+            }
+            self._ddm_errors.pop(key, None)
+
+        return self._ddm_capabilities
+
+    def _build_appliance_metadata(
+        self,
+        appliances: list[dict[str, Any]],
+        statuses: Mapping[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        """Build normalized metadata for every discovered appliance."""
+        metadata: dict[str, dict[str, Any]] = {}
+        for appliance in appliances:
+            said = appliance_said(appliance)
+            if not said:
+                continue
+            metadata[said] = _appliance_metadata(appliance, statuses.get(said))
+        self._appliance_metadata = metadata
+        return metadata
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -132,7 +300,15 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 else:
                     statuses[said] = {"error": "No usable Whirlpool REST status/appliance snapshot returned"}
             self._latest_statuses = statuses
-            return {"appliances": appliances, "statuses": statuses}
+            appliance_metadata = self._build_appliance_metadata(appliances, statuses)
+            await self.async_fetch_ddm_capabilities(appliances, statuses)
+            return {
+                "appliances": appliances,
+                "statuses": statuses,
+                "appliance_metadata": appliance_metadata,
+                "ddm_capabilities": self._ddm_capabilities,
+                "ddm_errors": self._ddm_errors,
+            }
         except WhirlpoolApiError as err:
             raise UpdateFailed(str(err)) from err
 
@@ -173,6 +349,9 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data = dict(self.data or {})
             data["statuses"] = statuses
             data.setdefault("appliances", self._latest_appliances)
+            data.setdefault("appliance_metadata", self._appliance_metadata)
+            data.setdefault("ddm_capabilities", self._ddm_capabilities)
+            data.setdefault("ddm_errors", self._ddm_errors)
             self.async_set_updated_data(data)
 
         self.hass.loop.call_soon_threadsafe(apply)

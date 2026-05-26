@@ -289,6 +289,11 @@ class WhirlpoolThingShieldManager:
             await self._mqtt.publish_command(runtime, "getStatus")
         except WhirlpoolApiError as err:
             _LOGGER.debug("Optional ThingShield getStatus request failed for %s: %s", said, err)
+        for optional_command in ("getApplianceInfo", "getCapabilities"):
+            try:
+                await self._mqtt.publish_command(runtime, optional_command)
+            except WhirlpoolApiError as err:
+                _LOGGER.debug("Optional ThingShield %s request failed for %s: %s", optional_command, said, err)
         return result
 
     async def publish_command(
@@ -391,7 +396,21 @@ class WhirlpoolThingShieldManager:
                 return payload
         # A few command envelopes nest the real state one level deeper.
         if isinstance(payload, Mapping):
-            for key in ("state", "data", "appliance", "attributes", "attributeMap"):
+            for key in (
+                "state",
+                "data",
+                "appliance",
+                "attributes",
+                "attributeMap",
+                "washer",
+                "dryer",
+                "dishwasher",
+                "refrigerator",
+                "freezer",
+                "airConditioner",
+                "aircon",
+                "cooktop",
+            ):
                 nested = payload.get(key)
                 if isinstance(nested, (Mapping, list)):
                     # Preserve the outer keys too, but expose nested fields at top

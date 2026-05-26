@@ -420,3 +420,12 @@ set_remote_enable:
       required: true
       selector:
         boolean:
+
+
+refresh_ddm_capabilities:
+  name: Refresh DDM capabilities
+  description: Fetch and cache Whirlpool DDM/capability payloads from /api/v1/contents/all/{ddmKey} for all discovered appliances.
+
+
+# Diagnostics are provided through Home Assistant's built-in diagnostics UI:
+# Settings > Devices & services > Whirlpool Appliances > three-dot menu > Download diagnostics.
