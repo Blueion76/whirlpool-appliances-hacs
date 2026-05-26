@@ -14,7 +14,6 @@ from homeassistant.helpers import device_registry as dr, selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import WhirlpoolAccountLockedError, WhirlpoolApiError, WhirlpoolAuthError, WhirlpoolCloudClient
-from .entity import attr_value, flatten
 from .api_spec import APPLIANCE_FUNCTIONS, DISCOVERED_API_PATHS
 from .const import (
     CONF_BRAND,
@@ -134,50 +133,15 @@ def _service_said(hass: HomeAssistant, call: ServiceCall) -> str:
     raise HomeAssistantError("Select a Whirlpool appliance device or enter a SAID")
 
 
-def _remote_enable_is_off_for_said(hass: HomeAssistant, said: str | None) -> bool:
-    """Check latest coordinator status for a disabled remote-enable flag."""
-    for domain_data in hass.data.get(DOMAIN, {}).values():
-        coordinator = domain_data.get(DATA_COORDINATOR)
-        for appliance in (coordinator.data or {}).get("appliances", []):
-            appliance_said = (
-                appliance.get("SAID")
-                or appliance.get("said")
-                or appliance.get("applianceId")
-                or appliance.get("_id")
-            )
-            if said and str(appliance_said) != str(said):
-                continue
-            flat = flatten((coordinator.data or {}).get("status", {}).get(str(said), {}))
-            raw = None
-            for key in (
-                "XCat_RemoteSetRemoteControlEnable",
-                "XCat_RemoteControlEnable",
-                "remoteControlEnable",
-                "remoteEnable",
-                "remoteEnabled",
-            ):
-                raw = attr_value(flat, key)
-                if raw is not None:
-                    break
-            return str(raw).strip().lower() in {"0", "false", "off", "disabled"}
-    return False
-
-
-def _service_result(result: Any, hass: HomeAssistant | None = None, said: str | None = None) -> dict[str, Any]:
-    def _raise() -> None:
-        if hass is not None and _remote_enable_is_off_for_said(hass, said):
-            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="remote_enable_off")
-        raise HomeAssistantError(translation_domain=DOMAIN, translation_key="request_failed")
-
+def _service_result(result: Any) -> dict[str, Any]:
     if result is False:
-        _raise()
+        raise HomeAssistantError(translation_domain=DOMAIN, translation_key="request_failed")
     if isinstance(result, dict):
         status = str(result.get("status", "")).strip().lower()
         message = str(result.get("message", "")).strip().lower()
         if status in {"error", "failed", "fail", "02", "2", "nack"} or "negative acknow" in message:
-            _raise()
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="request_failed")
     return {"result": result}
-
 
 def _service_bool(call: ServiceCall, key: str = "enabled") -> bool:
     """Return a service boolean, accepting legacy 'on' for YAML/backward compatibility."""
@@ -203,7 +167,7 @@ def _register_services(hass: HomeAssistant) -> None:
             json=call.data.get("body"),
             params=call.data.get("params"),
         )
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def send_command(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
@@ -214,13 +178,13 @@ def _register_services(hass: HomeAssistant) -> None:
             call.data.get("raw"),
         )
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def set_cavity_light(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.set_cavity_light(_service_said(hass, call), _service_bool(call), call.data.get("cavity"))
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def publish_thing_command(call: ServiceCall) -> dict[str, Any]:
         coordinator = _first_coordinator(hass)
@@ -229,13 +193,13 @@ def _register_services(hass: HomeAssistant) -> None:
             call.data.get("command", "getState"),
             call.data.get("payload"),
         )
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def set_attributes(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.send_attributes(_service_said(hass, call), call.data["attributes"])
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def set_oven_cook(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
@@ -257,7 +221,7 @@ def _register_services(hass: HomeAssistant) -> None:
             complete_action=call.data.get("complete_action", "turn_off"),
         )
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def set_oven_frozen_bake(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
@@ -270,60 +234,60 @@ def _register_services(hass: HomeAssistant) -> None:
             complete_action=call.data.get("complete_action", "turn_off"),
         )
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def stop_oven_cavity(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.stop_oven_cavity(_service_said(hass, call), call.data.get("cavity", "upper"))
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def stop_microwave(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.stop_microwave(_service_said(hass, call))
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def set_quiet_mode(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.set_quiet_mode(_service_said(hass, call), _service_bool(call))
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def set_remote_enable(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.set_remote_enable(_service_said(hass, call), _service_bool(call))
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def set_kitchen_timer(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.set_kitchen_timer(_service_said(hass, call), call.data["seconds"], call.data.get("timer", 1))
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def stop_kitchen_timer(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.stop_kitchen_timer(_service_said(hass, call), call.data.get("timer", 1))
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def check_firmware_update(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.check_firmware_update(_service_said(hass, call))
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def sync_time(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.sync_appliance_time(_service_said(hass, call), call.data.get("timezone"))
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def set_time_auto_update(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.set_time_auto_update(_service_said(hass, call), call.data["enabled"], call.data.get("timezone"))
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     async def refresh(call: ServiceCall) -> None:
         await _first_coordinator(hass).async_request_refresh()
@@ -350,7 +314,7 @@ def _register_services(hass: HomeAssistant) -> None:
             **path_values,
         )
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result, hass)
+        return _service_result(result)
 
     hass.services.async_register(
         DOMAIN,
