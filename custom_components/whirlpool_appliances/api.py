@@ -484,7 +484,7 @@ class WhirlpoolCloudClient:
     async def get_status(self, said: str) -> Any:
         return await self.request("GET", f"/api/v1/appliance/status/{said}")
 
-    async def get_ddm_capabilities(self, ddm_key: str, *, force: bool = False) -> Any:
+    async def get_ddm_capabilities(self, ddm_key: str, *, said: str | None = None, force: bool = False) -> Any:
         """Fetch and cache Whirlpool DDM/capability data for a data-model key.
 
         The Whirlpool app downloads per-model capability data from
@@ -494,13 +494,31 @@ class WhirlpoolCloudClient:
         key = str(ddm_key or "").strip()
         if not key:
             raise WhirlpoolApiError("Missing DDM key")
-        if not force and key in self._ddm_capability_cache:
-            return self._ddm_capability_cache[key]
-        # The contents/DDM endpoint is served from Whirlpool's content layer.
-        # It rejects OAuth Bearer tokens as an invalid AWS-style Authorization
-        # header, so do not send Authorization here.
-        data = await self.request("GET", f"/api/v1/contents/all/{key}", auth=False)
-        self._ddm_capability_cache[key] = data
+        cache_key = f"{key}:{said or ''}"
+        if not force and cache_key in self._ddm_capability_cache:
+            return self._ddm_capability_cache[cache_key]
+
+        # The public APK string table contains /api/v1/contents/all/{ddmKey},
+        # but live accounts can return API Gateway/S3 errors for that route.
+        # The maintained whirlpool_hacs client fetches the data model through
+        # POST /api/v2/DeviceDataModel with {"saIdList": [said]}, which is the
+        # endpoint that returns the per-appliance DDM/capability payload.
+        if said:
+            data = await self.request(
+                "POST",
+                "/api/v2/DeviceDataModel",
+                json={"saIdList": [said]},
+                extra_headers={
+                    "WP-CLIENT-COUNTRY": self.region,
+                    "WP-CLIENT-BRAND": self.brand,
+                },
+            )
+            self._ddm_capability_cache[cache_key] = data
+            return data
+
+        # Last-resort fallback for future accounts where the content route works.
+        data = await self.request("GET", f"/api/v1/contents/all/{key}")
+        self._ddm_capability_cache[cache_key] = data
         return data
 
     async def get_appliance(self, said: str) -> Any:
