@@ -1,0 +1,63 @@
+name: Unsupported Whirlpool appliance
+description: Request support for a Whirlpool/KitchenAid/Maytag/JennAir/Amana appliance
+title: "[Unsupported appliance]: "
+labels: ["unsupported appliance", "needs diagnostics"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping expand appliance support. Please upload a diagnostics file from Home Assistant.
+        Go to Settings → Devices & services → Whirlpool Appliances → three-dot menu → Download diagnostics.
+  - type: input
+    id: appliance_type
+    attributes:
+      label: Appliance type
+      description: Washer, dryer, dishwasher, refrigerator, freezer, air conditioner, cooktop, oven, microwave, etc.
+      placeholder: Washer
+    validations:
+      required: true
+  - type: input
+    id: brand
+    attributes:
+      label: Brand
+      placeholder: Whirlpool / KitchenAid / Maytag / JennAir / Amana
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model number
+      description: Do not include serial number.
+    validations:
+      required: true
+  - type: dropdown
+    id: region
+    attributes:
+      label: Region
+      options:
+        - US/NAR
+        - EU
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Attach the downloaded diagnostics JSON. It should already redact SAID/serial/account data.
+    validations:
+      required: true
+  - type: textarea
+    id: missing
+    attributes:
+      label: What entities are missing or wrong?
+      placeholder: State sensor is unknown, no refrigerator temperature, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: app_behavior
+    attributes:
+      label: Official app behavior
+      description: What can the official Whirlpool app view/control for this appliance?
+    validations:
+      required: false

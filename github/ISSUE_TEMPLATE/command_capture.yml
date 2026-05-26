@@ -1,0 +1,45 @@
+name: Whirlpool app command capture
+description: Provide a sanitized mitmproxy/app capture for adding a confirmed writable command
+title: "[Command capture]: "
+labels: ["command capture", "needs review"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Only submit captures for your own appliance/account. Redact Authorization headers, tokens, emails, account IDs, SAIDs, serials, MAC addresses, and location IDs.
+  - type: input
+    id: feature
+    attributes:
+      label: Feature captured
+      placeholder: Dishwasher start, washer pause, refrigerator set temp, etc.
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model number
+    validations:
+      required: true
+  - type: textarea
+    id: request
+    attributes:
+      label: Sanitized request
+      description: Include method, URL path, headers that matter, and JSON body. Redact secrets and identifiers.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: response
+    attributes:
+      label: Sanitized response
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: before_after
+    attributes:
+      label: Before/after raw status
+      description: Include sanitized raw status before and after the command when available.
+      render: json
+    validations:
+      required: false
