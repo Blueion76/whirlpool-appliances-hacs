@@ -39,18 +39,33 @@ async def _set_control_lock(client, said: str, on: bool):
     return await client.set_oven_control_lock(said, on)
 
 
+async def _set_remote_enable(client, said: str, on: bool):
+    return await client.set_remote_enable(said, on)
+
+
 async def _set_sabbath(client, said: str, on: bool):
     return await client.set_oven_sabbath_mode(said, on)
+
+
+async def _set_quiet_mode(client, said: str, on: bool):
+    return await client.set_quiet_mode(said, on)
 
 
 async def _set_microwave_turntable(client, said: str, on: bool):
     return await client.set_microwave_turntable(said, on)
 
 
+async def _set_time_auto_update(client, said: str, on: bool):
+    return await client.set_time_auto_update(said, on)
+
+
 SWITCHES = (
     WhirlpoolSwitchDescription(key="power", translation_key="power", entity_registry_enabled_default=False, value_fn=lambda flat: _to_bool(find_key(flat, ("powerOn", "power", "isOn"))), set_fn=_set_power, non_cooking_only=True),
     WhirlpoolSwitchDescription(key="control_lock", translation_key="control_lock", value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OperationSetControlLock")), set_fn=_set_control_lock, cooking_only=True),
+    WhirlpoolSwitchDescription(key="remote_enable", translation_key="remote_enable", value_fn=lambda flat: _to_bool(attr_value(flat, "XCat_RemoteSetRemoteControlEnable")), set_fn=_set_remote_enable, cooking_only=True),
     WhirlpoolSwitchDescription(key="sabbath_mode", translation_key="sabbath_mode", entity_registry_enabled_default=False, value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OperationSetSabbathModeEnabled")), set_fn=_set_sabbath, cooking_only=True),
+    WhirlpoolSwitchDescription(key="quiet_mode", translation_key="quiet_mode", value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OperationSetQuietModeEnabled")), set_fn=_set_quiet_mode, cooking_only=True),
+    WhirlpoolSwitchDescription(key="time_auto_update", translation_key="time_auto_update", value_fn=lambda flat: str(attr_value(flat, "DateTimeMode") or attr_value(flat, "XCat_DateTimeMode") or "") == "2", set_fn=_set_time_auto_update, cooking_only=True),
     WhirlpoolSwitchDescription(key="microwave_turntable", translation_key="microwave_turntable", value_fn=lambda flat: _to_bool(attr_value(flat, "Mwo_CycleSetTurntable")), set_fn=_set_microwave_turntable, cooking_only=True, microwave_only=True),
 )
 

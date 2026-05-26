@@ -63,12 +63,62 @@ def _door(flat: Mapping[str, Any]) -> bool | None:
     return None
 
 
+def _problem(flat: Mapping[str, Any]) -> bool:
+    """Return true only when Whirlpool reports an actual problem/fault.
+
+    Home Assistant's ``problem`` binary sensor device class displays
+    ``off`` as Clear and ``on`` as Problem. Missing/empty/no-fault values should
+    therefore be False instead of None, otherwise the entity shows Unknown even
+    when there is no issue.
+    """
+    raw = find_key(
+        flat,
+        (
+            "activeFault",
+            "faultCode",
+            "errorCode",
+            "alarmCode",
+            "error",
+            "fault",
+            "alarm",
+            "hasError",
+        ),
+    )
+    if raw in (None, "", 0, False):
+        return False
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        return normalized not in {
+            "",
+            "0",
+            "false",
+            "none",
+            "no",
+            "clear",
+            "ok",
+            "normal",
+            "no_fault",
+            "no fault",
+            "no_error",
+            "no error",
+        }
+    return bool(raw)
+
+
 BINARY_DESCRIPTIONS: tuple[WhirlpoolApkBinarySensorDescription, ...] = (
     WhirlpoolApkBinarySensorDescription(key="online", translation_key="online", device_class=BinarySensorDeviceClass.CONNECTIVITY, value_fn=_bool_by_keys("Online", "online", "isOnline", "connected")),
     WhirlpoolApkBinarySensorDescription(key="door", translation_key="door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_door),
-    WhirlpoolApkBinarySensorDescription(key="remote_control", translation_key="remote_control", value_fn=_bool_by_keys("remoteControl", "remoteEnabled", "remoteStartEnabled", "remoteStartEnable")),
+    WhirlpoolApkBinarySensorDescription(
+        key="remote_control",
+        translation_key="remote_control",
+        value_fn=lambda flat: (
+            _bool(attr_value(flat, "XCat_RemoteSetRemoteControlEnable"))
+            if attr_value(flat, "XCat_RemoteSetRemoteControlEnable") is not None
+            else _bool_by_keys("remoteControl", "remoteEnabled", "remoteStartEnabled", "remoteStartEnable")(flat)
+        ),
+    ),
     WhirlpoolApkBinarySensorDescription(key="running", translation_key="running", device_class=BinarySensorDeviceClass.RUNNING, value_fn=_running),
-    WhirlpoolApkBinarySensorDescription(key="error", translation_key="error", device_class=BinarySensorDeviceClass.PROBLEM, value_fn=lambda flat: (None if (v := find_key(flat, ("activeFault", "error", "fault", "alarm", "hasError"))) is None else (v != "none" if isinstance(v, str) else bool(v)))),
+    WhirlpoolApkBinarySensorDescription(key="error", translation_key="error", device_class=BinarySensorDeviceClass.PROBLEM, value_fn=_problem),
     WhirlpoolApkBinarySensorDescription(key="upper_door", translation_key="upper_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("OvenUpperCavity_OpStatusDoorOpen"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(key="lower_door", translation_key="lower_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("OvenLowerCavity_OpStatusDoorOpen"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(
@@ -141,3 +191,6 @@ class WhirlpoolApkBinarySensor(WhirlpoolApkEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         return self.entity_description.value_fn(self.flat_status)
+
+
+

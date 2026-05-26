@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import timedelta
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -92,6 +93,155 @@ def _int_legacy_attr(name: str) -> Callable[[Mapping[str, Any]], int | None]:
     return value
 
 
+def _int_value(raw: Any) -> int | None:
+    if raw in (None, ""):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        try:
+            return int(float(raw))
+        except (TypeError, ValueError):
+            return None
+
+
+def _attr_update_time(flat: Mapping[str, Any], attr: str) -> int | None:
+    return _int_value(
+        find_key(
+            flat,
+            (
+                f"attributes.{attr}.updateTime",
+                f"{attr}.updateTime",
+                f"{attr}_updateTime",
+            ),
+        )
+    )
+
+
+def _oven_prefix(cavity: str) -> str:
+    return "OvenLowerCavity" if cavity == "lower" else "OvenUpperCavity"
+
+
+def _oven_is_active(flat: Mapping[str, Any], cavity: str) -> bool:
+    return str(attr_value(flat, f"{_oven_prefix(cavity)}_OpStatusState") or "") in {"1", "2"}
+
+
+def _oven_elapsed_seconds(flat: Mapping[str, Any], cavity: str) -> int | None:
+    prefix = _oven_prefix(cavity)
+    raw = _int_value(attr_value(flat, f"{prefix}_TimeStatusCycleTimeElapsed"))
+    if raw and raw > 0:
+        return raw
+
+    if not _oven_is_active(flat, cavity):
+        return None
+
+    # Minerva ovens often leave TimeStatusCycleTimeElapsed at the factory
+    # default 0. While actively preheating/cooking, derive elapsed time from the
+    # most recent operation/state timestamp.
+    start_ms = (
+        _attr_update_time(flat, f"{prefix}_OpSetOperations")
+        or _attr_update_time(flat, f"{prefix}_OpStatusState")
+    )
+    if not start_ms:
+        return None
+
+    elapsed = int((time.time() * 1000 - start_ms) / 1000)
+    if elapsed < 0 or elapsed > 14 * 24 * 60 * 60:
+        return None
+    return elapsed
+
+
+def _oven_cook_mode(flat: Mapping[str, Any], cavity: str) -> Any | None:
+    prefix = _oven_prefix(cavity)
+    raw = attr_value(flat, f"{prefix}_CycleSetCommonMode")
+    state = str(attr_value(flat, f"{prefix}_OpStatusState") or "")
+    if raw in (None, "0", 0) and state in {"1", "2"}:
+        # Some combo models keep CycleSetCommonMode at 0 after a remote start.
+        # Do not infer from target temperature because high-temp bake can look
+        # like broil. The climate entity can remember the last HA-commanded
+        # preset during runtime; this diagnostic sensor should stay unknown
+        # unless Whirlpool reports a real mode.
+        return None
+    return COOK_MODE.get(str(raw), raw) if raw is not None else None
+
+
+def _is_factory_default_attr(flat: Mapping[str, Any], attr: str) -> bool:
+    """Return true for unchanged Whirlpool placeholder defaults.
+
+    The Minerva microwave payload includes many zero-valued microwave fields
+    whose updateTime is the same 2018 factory/default timestamp. Treating those
+    as live values makes HA show cook power/time values permanently as 0.
+    """
+    value = attr_value(flat, attr)
+    updated = _attr_update_time(flat, attr)
+    return str(value or "") == "0" and updated is not None and updated <= 1540000000000
+
+
+def _mwo_cook_time_set_seconds(flat: Mapping[str, Any]) -> int | None:
+    value = _int_value(attr_value(flat, "Mwo_TimeSetCookTimeSet"))
+    if value is None or value <= 0:
+        return None
+    return value
+
+
+def _mwo_is_active(flat: Mapping[str, Any]) -> bool:
+    state = str(attr_value(flat, "Mwo_OperationStatusState") or "")
+    if state in {"2", "3"}:  # running or paused
+        return True
+
+    operation = str(attr_value(flat, "Mwo_OperationSetOperations") or "")
+    start_ms = _attr_update_time(flat, "Mwo_OperationSetOperations")
+    set_seconds = _mwo_cook_time_set_seconds(flat)
+    if operation == "2" and start_ms and set_seconds:
+        elapsed = int((time.time() * 1000 - start_ms) / 1000)
+        return 0 <= elapsed <= set_seconds + 300
+
+    return False
+
+
+def _mwo_elapsed_seconds(flat: Mapping[str, Any]) -> int | None:
+    raw = _int_value(attr_value(flat, "Mwo_TimeStatusCycleTimeElapsed"))
+    if raw and raw > 0:
+        return raw
+
+    set_seconds = _mwo_cook_time_set_seconds(flat)
+    start_ms = _attr_update_time(flat, "Mwo_OperationSetOperations")
+    operation = str(attr_value(flat, "Mwo_OperationSetOperations") or "")
+    if operation != "2" or not start_ms or not set_seconds:
+        return None
+
+    elapsed = int((time.time() * 1000 - start_ms) / 1000)
+    if elapsed < 0 or elapsed > set_seconds + 300:
+        return None
+    return min(elapsed, set_seconds)
+
+
+def _mwo_remaining_seconds(flat: Mapping[str, Any]) -> int | None:
+    raw = _int_value(attr_value(flat, "Mwo_TimeStatusCookTimeRemaining"))
+    if raw and raw > 0:
+        return raw
+
+    set_seconds = _mwo_cook_time_set_seconds(flat)
+    elapsed = _mwo_elapsed_seconds(flat)
+    if set_seconds is None or elapsed is None:
+        return None
+    return max(set_seconds - elapsed, 0)
+
+
+def _mwo_cook_power(flat: Mapping[str, Any]) -> int | None:
+    raw = _int_value(attr_value(flat, "Mwo_CycleSetCookPower"))
+    if raw and raw > 0:
+        return raw
+
+    # A zero with the factory/default updateTime is not a real "0% power"
+    # reading. Standard microwave cook defaults to full power when no explicit
+    # power level is reported.
+    if _is_factory_default_attr(flat, "Mwo_CycleSetCookPower"):
+        return 100 if _mwo_is_active(flat) else None
+
+    return raw
+
+
 def _mwo_state(flat: Mapping[str, Any]) -> Any | None:
     raw = attr_value(flat, "Mwo_OperationStatusState")
     if raw is None:
@@ -155,8 +305,22 @@ def _end_time(flat: Mapping[str, Any]) -> Any | None:
 
 def _active_fault(flat: Mapping[str, Any]) -> Any | None:
     value = find_key(flat, ("activeFault", "faultCode", "errorCode", "alarmCode"))
-    if value == "none":
-        return None
+    if value in (None, "", 0, False):
+        return "Clear"
+    if isinstance(value, str) and value.strip().lower() in {
+        "0",
+        "false",
+        "none",
+        "no",
+        "clear",
+        "ok",
+        "normal",
+        "no_fault",
+        "no fault",
+        "no_error",
+        "no error",
+    }:
+        return "Clear"
     return value
 
 
@@ -171,10 +335,13 @@ def _generic_state(flat: Mapping[str, Any]) -> Any | None:
 
 
 def _generic_cook_mode(flat: Mapping[str, Any]) -> Any | None:
-    raw = attr_value(flat, "OvenUpperCavity_CycleSetCommonMode")
-    if raw in (None, "0"):
-        raw = attr_value(flat, "OvenLowerCavity_CycleSetCommonMode")
-    return COOK_MODE.get(str(raw), raw) if raw is not None else None
+    upper = _oven_cook_mode(flat, "upper")
+    if upper not in (None, "Standby"):
+        return upper
+    lower = _oven_cook_mode(flat, "lower")
+    if lower is not None:
+        return lower
+    return upper
 
 
 def _generic_current_temp(flat: Mapping[str, Any]) -> Any | None:
@@ -207,21 +374,22 @@ SENSOR_DESCRIPTIONS: tuple[WhirlpoolApkSensorDescription, ...] = (
     WhirlpoolApkSensorDescription(key="cook_mode", translation_key="cook_mode", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=_generic_cook_mode, cooking_only=True),
     WhirlpoolApkSensorDescription(key="upper_cavity_state", translation_key="upper_cavity_state", device_class=SensorDeviceClass.ENUM, options=list(CAVITY_STATE.values()), value_fn=_map_attr("OvenUpperCavity_OpStatusState", CAVITY_STATE), cooking_only=True),
     WhirlpoolApkSensorDescription(key="lower_cavity_state", translation_key="lower_cavity_state", device_class=SensorDeviceClass.ENUM, options=list(CAVITY_STATE.values()), value_fn=_map_attr("OvenLowerCavity_OpStatusState", CAVITY_STATE), cooking_only=True),
-    WhirlpoolApkSensorDescription(key="upper_cook_mode", translation_key="upper_cook_mode", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=_map_attr("OvenUpperCavity_CycleSetCommonMode", COOK_MODE), cooking_only=True),
-    WhirlpoolApkSensorDescription(key="lower_cook_mode", translation_key="lower_cook_mode", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=_map_attr("OvenLowerCavity_CycleSetCommonMode", COOK_MODE), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="upper_cook_mode", translation_key="upper_cook_mode", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=lambda flat: _oven_cook_mode(flat, "upper"), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="lower_cook_mode", translation_key="lower_cook_mode", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=lambda flat: _oven_cook_mode(flat, "lower"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="upper_current_temperature", translation_key="upper_current_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_temp_tenths_attr("OvenUpperCavity_DisplStatusDisplayTemp"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="lower_current_temperature", translation_key="lower_current_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_temp_tenths_attr("OvenLowerCavity_DisplStatusDisplayTemp"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="upper_target_temperature", translation_key="upper_target_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_temp_tenths_attr("OvenUpperCavity_CycleSetTargetTemp"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="lower_target_temperature", translation_key="lower_target_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_temp_tenths_attr("OvenLowerCavity_CycleSetTargetTemp"), cooking_only=True),
-    WhirlpoolApkSensorDescription(key="upper_cook_time_elapsed", translation_key="upper_cook_time_elapsed", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_legacy_attr("OvenUpperCavity_TimeStatusCycleTimeElapsed"), cooking_only=True),
-    WhirlpoolApkSensorDescription(key="lower_cook_time_elapsed", translation_key="lower_cook_time_elapsed", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_legacy_attr("OvenLowerCavity_TimeStatusCycleTimeElapsed"), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="upper_cook_time_elapsed", translation_key="upper_cook_time_elapsed", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=lambda flat: _oven_elapsed_seconds(flat, "upper"), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="lower_cook_time_elapsed", translation_key="lower_cook_time_elapsed", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=lambda flat: _oven_elapsed_seconds(flat, "lower"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="kitchen_timer_1_state", translation_key="kitchen_timer_1_state", device_class=SensorDeviceClass.ENUM, options=list(TIMER_STATE.values()), value_fn=_map_attr("KitchenTimer01_StatusState", TIMER_STATE), cooking_only=True),
     WhirlpoolApkSensorDescription(key="kitchen_timer_1_remaining", translation_key="kitchen_timer_1_remaining", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_legacy_attr("KitchenTimer01_StatusTimeRemaining"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="microwave_state", translation_key="microwave_state", device_class=SensorDeviceClass.ENUM, options=list(MWO_STATE.values()), value_fn=_mwo_state, cooking_only=True, microwave_only=True),
     WhirlpoolApkSensorDescription(key="microwave_cook_time_state", translation_key="microwave_cook_time_state", device_class=SensorDeviceClass.ENUM, options=list(MWO_COOK_TIME_STATE.values()), value_fn=_map_attr("Mwo_OperationStatusCookTimeState", MWO_COOK_TIME_STATE), cooking_only=True, microwave_only=True),
-    WhirlpoolApkSensorDescription(key="microwave_cook_time_remaining", translation_key="microwave_cook_time_remaining", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_int_legacy_attr("Mwo_TimeStatusCookTimeRemaining"), cooking_only=True, microwave_only=True),
+    WhirlpoolApkSensorDescription(key="microwave_cook_time_remaining", translation_key="microwave_cook_time_remaining", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_mwo_remaining_seconds, cooking_only=True, microwave_only=True),
+    WhirlpoolApkSensorDescription(key="microwave_cook_time_elapsed", translation_key="microwave_cook_time_elapsed", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_mwo_elapsed_seconds, cooking_only=True, microwave_only=True),
     WhirlpoolApkSensorDescription(key="microwave_cook_time_set", translation_key="microwave_cook_time_set", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_int_legacy_attr("Mwo_TimeSetCookTimeSet"), cooking_only=True, microwave_only=True),
-    WhirlpoolApkSensorDescription(key="microwave_cook_power", translation_key="microwave_cook_power", value_fn=_int_legacy_attr("Mwo_CycleSetCookPower"), cooking_only=True, microwave_only=True),
+    WhirlpoolApkSensorDescription(key="microwave_cook_power", translation_key="microwave_cook_power", native_unit_of_measurement=PERCENTAGE, value_fn=_mwo_cook_power, cooking_only=True, microwave_only=True),
     WhirlpoolApkSensorDescription(key="microwave_current_temperature", translation_key="microwave_current_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_temp_tenths_attr("Mwo_DisplayStatusDisplayTemp"), cooking_only=True, microwave_only=True),
     WhirlpoolApkSensorDescription(key="microwave_target_temperature", translation_key="microwave_target_temperature", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=_temp_tenths_attr("Mwo_CycleSetTargetTemp"), cooking_only=True, microwave_only=True),
 )

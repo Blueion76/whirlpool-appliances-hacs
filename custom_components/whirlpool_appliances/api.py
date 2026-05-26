@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json as jsonlib
 import logging
+import re
 import time
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -633,6 +634,17 @@ class WhirlpoolCloudClient:
             said, {f"{prefix}_DisplaySetLightOn": "1" if on else "0"}
         )
 
+    @staticmethod
+    def _command_rejected(result: Any) -> bool:
+        """Return true for Whirlpool command negative acknowledgements."""
+        if result is False:
+            return True
+        if isinstance(result, Mapping):
+            status = str(result.get("status", "")).strip().lower()
+            message = str(result.get("message", "")).strip().lower()
+            return status in {"error", "failed", "fail", "02", "2", "nack"} or "negative acknow" in message
+        return False
+
     async def set_power(self, said: str, on: bool) -> Any:
         if on:
             # Ovens cannot be generically powered on without a cooking mode and
@@ -649,7 +661,18 @@ class WhirlpoolCloudClient:
     async def set_oven_cook(
         self, said: str, temperature: float, mode: str = "bake", cavity: str | None = None
     ) -> Any:
-        """Start/modify a Whirlpool legacy oven cavity cook cycle."""
+        """Start/modify a Whirlpool legacy oven cavity cook cycle.
+
+        Captured Whirlpool Android app payload for Bake:
+          OvenUpperCavity_CycleSetCommonMode: "2"
+          OvenUpperCavity_CycleSetTargetTemp: "1766"
+          OvenUpperCavity_OpSetCookTimeCompleteAction: "3"
+          OvenUpperCavity_OpSetOperations: "2"
+
+        This WOC54EC0HS00/Minerva combo oven accepts OpSetOperations "2"
+        for remote starts. Keep the app-observed CookTimeCompleteAction "3"
+        but use the known-working operation value "2".
+        """
         prefix = self._cavity_prefix(cavity)
         mode_map = {
             "standby": "0",
@@ -667,11 +690,13 @@ class WhirlpoolCloudClient:
         selected = mode_map.get(str(mode).lower())
         if selected is None:
             raise WhirlpoolApiError(f"Unsupported oven cook mode: {mode}")
+
         return await self.send_attributes(
             said,
             {
                 f"{prefix}_CycleSetCommonMode": selected,
-                f"{prefix}_CycleSetTargetTemp": str(round(float(temperature) * 10)),
+                f"{prefix}_CycleSetTargetTemp": str(int(float(temperature) * 10)),
+                f"{prefix}_OpSetCookTimeCompleteAction": "3",
                 f"{prefix}_OpSetOperations": "2",
             },
         )
@@ -682,6 +707,71 @@ class WhirlpoolCloudClient:
 
     async def stop_microwave(self, said: str) -> Any:
         return await self.send_attributes(said, {"Mwo_OperationSetOperations": "1"})
+
+    async def set_kitchen_timer(self, said: str, seconds: int, timer: int = 1) -> Any:
+        """Set/start a Whirlpool on-screen kitchen timer.
+
+        Captured Android app 6.8.3 uses:
+          KitchenTimer01_SetTimeSet: seconds
+          KitchenTimer01_SetOperations: 2
+
+        ``timer`` is reserved for future multi-timer models; current Minerva
+        payloads expose KitchenTimer01.
+        """
+        seconds = max(0, int(seconds))
+        timer_attr = f"KitchenTimer{int(timer):02d}"
+        return await self.send_attributes(
+            said,
+            {
+                f"{timer_attr}_SetTimeSet": str(seconds),
+                f"{timer_attr}_SetOperations": "2",
+            },
+        )
+
+    async def stop_kitchen_timer(self, said: str, timer: int = 1) -> Any:
+        """Stop/cancel a Whirlpool on-screen kitchen timer.
+
+        The app sends timer commands through the same /api/v1/appliance/command
+        setAttributes endpoint and includes the time value alongside the
+        operation. Preserve the last known timer duration when cancelling so the
+        appliance receives the same command shape as the app.
+        """
+        timer_attr = f"KitchenTimer{int(timer):02d}"
+        seconds = 0
+        try:
+            status = await self.get_appliance(said)
+            raw = self._attr_from_appliance_payload(status, f"{timer_attr}_SetTimeSet")
+            seconds = int(raw or 0)
+        except (WhirlpoolApiError, TypeError, ValueError):
+            seconds = 0
+
+        return await self.send_attributes(
+            said,
+            {
+                f"{timer_attr}_SetTimeSet": str(seconds),
+                f"{timer_attr}_SetOperations": "1",
+            },
+        )
+
+    async def check_firmware_update(self, said: str) -> Any:
+        """Check whether Whirlpool reports a firmware update.
+
+        Captured Android app 6.8.3:
+          GET /api/v2/checkForFirmwareUpdate/{SAID}
+          -> {"FirmwareUpdateAvailable": false}
+        """
+        return await self.request("GET", f"/api/v2/checkForFirmwareUpdate/{said}")
+
+    async def firmware_update_available(self, said: str) -> bool | None:
+        """Return firmware-update availability as a boolean."""
+        payload = await self.check_firmware_update(said)
+        if isinstance(payload, Mapping):
+            value = payload.get("FirmwareUpdateAvailable")
+            if isinstance(value, str):
+                return value.strip().lower() in {"1", "true", "yes", "available"}
+            if value is not None:
+                return bool(value)
+        return None
 
     @staticmethod
     def _attr_from_appliance_payload(payload: Any, attr: str) -> Any | None:
@@ -720,45 +810,163 @@ class WhirlpoolCloudClient:
             f"T{utc_value.hour:2d}:{utc_value.minute:02d}:{utc_value.second:02d}+00:00"
         )
 
-    async def sync_appliance_time(self, said: str, timezone_name: str | None = None) -> Any:
-        """Sync current time/timezone to a legacy Whirlpool appliance.
+    @staticmethod
+    def _extract_datetime_string(payload: Any, said: str | None = None) -> str | None:
+        """Extract a Whirlpool date/time string from a localized-time payload."""
+        datetime_re = re.compile(
+            r"\d{4}-\s*\d{1,2}-\d{1,2}T\s*\d{1,2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:?\d{2})?"
+        )
 
-        The Android APK contains a DateTimeSet flow/DTO. On the Minerva
-        oven/microwave payload this maps to ``XCat_DateTimeSetDateTimeSet`` plus
-        timezone/offset attributes. We fetch the appliance first so the button
-        uses the appliance's configured IANA timezone when available, then set
-        the current UTC timestamp and local offset values through the same
-        legacy setAttributes command path used by the app.
+        if isinstance(payload, str):
+            match = datetime_re.search(payload)
+            return match.group(0) if match else None
+
+        if isinstance(payload, list):
+            for item in payload:
+                found = WhirlpoolCloudClient._extract_datetime_string(item, said)
+                if found:
+                    return found
+            return None
+
+        if not isinstance(payload, Mapping):
+            return None
+
+        # Prefer a dict associated with this appliance if the endpoint returns
+        # more than one SAID.
+        if said:
+            for key, value in payload.items():
+                if str(key).upper() == str(said).upper():
+                    found = WhirlpoolCloudClient._extract_datetime_string(value, said)
+                    if found:
+                        return found
+
+        preferred_keys = (
+            "dateTime",
+            "datetime",
+            "dateTimeSet",
+            "localizedDateTime",
+            "localizedDateAndTime",
+            "localDateTime",
+            "time",
+            "currentTime",
+            "XCat_DateTimeSetDateTimeSet",
+        )
+        for key in preferred_keys:
+            if key in payload:
+                found = WhirlpoolCloudClient._extract_datetime_string(payload[key], said)
+                if found:
+                    return found
+
+        for value in payload.values():
+            found = WhirlpoolCloudClient._extract_datetime_string(value, said)
+            if found:
+                return found
+
+        return None
+
+    async def _apk_localized_datetime_for_said(self, said: str) -> str | None:
+        """Best-effort call to APK-observed localized date/time endpoints.
+
+        The APK string table contains both ``getLocalizedDateAndTimeForSaids``
+        and ``localizedDateAndTimeForSaids``. Builds vary on method/body shape,
+        so try the harmless variants and use the first recognizable datetime
+        response.
+        """
+        attempts: tuple[tuple[str, str, dict[str, Any] | None, dict[str, Any] | None], ...] = (
+            ("GET", "/api/v1/getLocalizedDateAndTimeForSaids", None, {"saids": said}),
+            ("GET", "/api/v1/getLocalizedDateAndTimeForSaids", None, {"said": said}),
+            ("POST", "/api/v1/getLocalizedDateAndTimeForSaids", {"saids": [said]}, None),
+            ("POST", "/api/v1/getLocalizedDateAndTimeForSaids", {"said": said}, None),
+            ("GET", "/api/v1/localizedDateAndTimeForSaids", None, {"saids": said}),
+            ("POST", "/api/v1/localizedDateAndTimeForSaids", {"saids": [said]}, None),
+            ("POST", "/api/v1/localizedDateAndTimeForSaids", {"said": said}, None),
+        )
+        for method, path, body, params in attempts:
+            try:
+                payload = await self.request(method, path, json=body, params=params)
+            except WhirlpoolApiError as err:
+                _LOGGER.debug("Localized date/time endpoint %s %s failed for %s: %s", method, path, said, err)
+                continue
+
+            found = self._extract_datetime_string(payload, said)
+            if found:
+                _LOGGER.debug("Using Whirlpool localized appliance time for %s from %s %s: %s", said, method, path, found)
+                return found
+
+            _LOGGER.debug("Localized date/time endpoint %s %s returned no parseable datetime for %s: %r", method, path, said, payload)
+        return None
+
+    @staticmethod
+    def _payload_looks_like_minerva_cooking(payload: Any) -> bool:
+        """Return true for Minerva cooking/oven payloads that reject time writes."""
+        text = str(payload).lower()
+        return "cooking" in text or "minerva" in text or "ovenuppercavity" in text or "mwo_" in text
+
+    async def _set_appliance_time_mode(self, said: str, mode: str, timezone_name: str | None = None) -> Any:
+        """Set appliance time auto-update mode using the Whirlpool Android app flow.
+
+        Captured Android app 6.8.3 behavior:
+          * Auto update ON sends dateTimeMode "2"
+          * Auto update OFF sends dateTimeMode "4"
+
+        Both use:
+          POST /api/v1/localizedDateAndTimeForSaids
+          {"attributes": [{"said": SAID,
+                           "dateTimeSetDateTimeSet": "YYYY-MM-DDTHH:MM:SS+00:00",
+                           "dateTimeMode": MODE}]}
         """
         status = await self.get_appliance(said)
+
         detected_tz = timezone_name or self._attr_from_appliance_payload(status, "TimeZoneId")
         detected_tz = detected_tz or self._attr_from_appliance_payload(status, "TimezoneId")
+
+        try:
+            ldt_payload = await self.request(
+                "POST",
+                "/api/v1/getLocalizedDateAndTimeForSaids",
+                json={"saidList": [said]},
+            )
+            if isinstance(ldt_payload, Mapping):
+                ldt_info = ldt_payload.get("ldtInfo")
+                if isinstance(ldt_info, list):
+                    for item in ldt_info:
+                        if not isinstance(item, Mapping):
+                            continue
+                        if str(item.get("SAID") or item.get("said") or "").upper() == str(said).upper():
+                            detected_tz = item.get("TIME_ZONE") or item.get("timeZone") or detected_tz
+                            break
+        except WhirlpoolApiError as err:
+            _LOGGER.debug("Unable to fetch localized date/time context for %s: %s", said, err)
+
         detected_tz = detected_tz or "UTC"
         try:
             tzinfo = ZoneInfo(str(detected_tz))
         except ZoneInfoNotFoundError:
             _LOGGER.warning("Unknown appliance timezone %r for %s; falling back to UTC", detected_tz, said)
-            detected_tz = "UTC"
             tzinfo = ZoneInfo("UTC")
 
-        now_local = datetime.now(tzinfo).replace(microsecond=0)
-        now_utc = now_local.astimezone(timezone.utc)
-        offset = now_local.utcoffset()
-        dst = now_local.dst()
-        offset_seconds = int(offset.total_seconds()) if offset is not None else 0
-        dst_seconds = int(dst.total_seconds()) if dst is not None else 0
-        attrs = {
-            "XCat_DateTimeSetDateTimeSet": self._format_appliance_datetime(now_utc),
-            "DateTimeMode": "2",
-            "XCat_DateTimeMode": "2",
-            "TimeZoneId": str(detected_tz),
-            "TimezoneId": str(detected_tz),
-            "UtcOffset": str(offset_seconds),
-            "XCat_UtcOffset": str(offset_seconds),
-            "DstOffset": str(dst_seconds),
-            "XCat_DstOffset": str(dst_seconds),
+        now_utc = datetime.now(tzinfo).replace(microsecond=0).astimezone(timezone.utc)
+        payload = {
+            "attributes": [
+                {
+                    "said": said,
+                    "dateTimeSetDateTimeSet": now_utc.isoformat(),
+                    "dateTimeMode": str(mode),
+                }
+            ]
         }
-        return await self.send_attributes(said, attrs)
+        return await self.request("POST", "/api/v1/localizedDateAndTimeForSaids", json=payload)
+
+    async def sync_appliance_time(self, said: str, timezone_name: str | None = None) -> Any:
+        """Enable Whirlpool app-style automatic time update.
+
+        The Whirlpool app's Auto Update Time ON path sends dateTimeMode "2".
+        """
+        return await self._set_appliance_time_mode(said, "2", timezone_name)
+
+    async def set_time_auto_update(self, said: str, enabled: bool, timezone_name: str | None = None) -> Any:
+        """Turn Whirlpool app-style automatic time update on or off."""
+        return await self._set_appliance_time_mode(said, "2" if enabled else "4", timezone_name)
 
     async def set_microwave_turntable(self, said: str, enabled: bool) -> Any:
         return await self.send_attributes(said, {"Mwo_CycleSetTurntable": "1" if enabled else "0"})
@@ -766,8 +974,21 @@ class WhirlpoolCloudClient:
     async def set_oven_control_lock(self, said: str, locked: bool) -> Any:
         return await self.send_attributes(said, {"Sys_OperationSetControlLock": "1" if locked else "0"})
 
+    async def set_remote_enable(self, said: str, enabled: bool) -> Any:
+        """Attempt to toggle remote enable using the Whirlpool remote-enable attribute.
+
+        Some Whirlpool/Minerva data models expose XCat_RemoteSetRemoteControlEnable
+        as read-only to the cloud, but add this for appliances/app builds that
+        accept it and for troubleshooting stale remote-enable cloud state.
+        """
+        return await self.send_attributes(said, {"XCat_RemoteSetRemoteControlEnable": "1" if enabled else "0"})
+
     async def set_oven_sabbath_mode(self, said: str, enabled: bool) -> Any:
         return await self.send_attributes(said, {"Sys_OperationSetSabbathModeEnabled": "1" if enabled else "0"})
+
+    async def set_quiet_mode(self, said: str, enabled: bool) -> Any:
+        """Turn appliance quiet mode on/off using app-observed attribute."""
+        return await self.send_attributes(said, {"Sys_OperationSetQuietModeEnabled": "1" if enabled else "0"})
 
 
 def _first_value(mapping: Mapping[str, Any], keys: tuple[str, ...]) -> Any | None:

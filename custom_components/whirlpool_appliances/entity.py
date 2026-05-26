@@ -248,20 +248,59 @@ def _has_real_status_payload(flat: Mapping[str, Any]) -> bool:
     )
 
 
+def _has_substantive_oven_cavity_attrs(flat: Mapping[str, Any], prefix: str) -> bool:
+    """Return true when a cavity has real cook/display attributes.
+
+    Some combo oven/microwave models expose a stray lower-cavity state when
+    Sabbath mode is toggled, even though the appliance has no physical lower
+    oven. Do not treat ``OpStatusState`` by itself as proof that a cavity
+    exists; require at least one cook/display/control attribute that real oven
+    cavities normally expose.
+    """
+    markers = (
+        f"{prefix}_CycleSetTargetTemp",
+        f"{prefix}_CycleSetCommonMode",
+        f"{prefix}_DisplStatusDisplayTemp",
+        f"{prefix}_DisplaySetLightOn",
+        f"{prefix}_OpSetOperations",
+        f"{prefix}_DoorStatusState",
+    )
+    return any(attr_value(flat, marker) is not None for marker in markers)
+
+
 def oven_cavity_exists(flat: Mapping[str, Any], cavity: str) -> bool:
     """Official-style oven cavity existence check.
 
-    whirlpool-sixth-sense checks the cavity state and treats state 4 as
-    NotPresent. The raw WOC54EC0HS00 payload has an upper oven and microwave
-    namespace but no lower cavity namespace, so lower entities must be skipped.
+    State 4 means NotPresent. Other state values only prove a cavity exists when
+    paired with real cook/display/control attributes. This prevents combo
+    oven/microwave units from creating fake lower-oven entities after Sabbath
+    mode exposes lower-cavity status-only keys.
     """
-    prefix = "OvenLowerCavity" if str(cavity).lower().startswith("lower") else "OvenUpperCavity"
+    is_lower = str(cavity).lower().startswith("lower")
+    prefix = "OvenLowerCavity" if is_lower else "OvenUpperCavity"
     state = attr_value(flat, f"{prefix}_OpStatusState")
-    if state is not None:
-        return str(state) != "4"
+    has_real_cavity_attrs = _has_substantive_oven_cavity_attrs(flat, prefix)
+
+    if state is not None and str(state) == "4":
+        return False
+
+    # Combo oven/microwave appliances can report lower-cavity Sabbath/state
+    # placeholders. If the Mwo namespace exists and the lower cavity has no
+    # actual oven cook/display/control attributes, do not create lower-oven
+    # entities.
+    has_microwave_namespace = any("mwo_" in key.lower() for key in flat)
+    if is_lower and has_microwave_namespace and not has_real_cavity_attrs:
+        return False
+
+    if has_real_cavity_attrs:
+        return True
+
     has_prefix = any(prefix.lower() in key.lower() for key in flat)
     if has_prefix:
-        return True
+        # A prefix with only state/Sabbath placeholders is not enough once we
+        # have a real status payload.
+        return not _has_real_status_payload(flat)
+
     if _has_real_status_payload(flat):
         return False
     # No useful payload yet. Keep one setup pass permissive so later refreshes
@@ -321,7 +360,7 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
             manufacturer=self._manufacturer(appliance),
             model=str(model or ""),
             serial_number=str(serial or ""),
-            hw_version=f"SAID: {self.said}",
+            hw_version=self.said,
         )
 
     @property
@@ -372,11 +411,19 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
     @staticmethod
     def _check_service_request(result: Any) -> None:
         """Raise a Home Assistant error when a Whirlpool control request failed."""
-        if result is False or (isinstance(result, Mapping) and str(result.get("status", "")).lower() in {"error", "failed"}):
+        if result is False:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="request_failed",
             )
+        if isinstance(result, Mapping):
+            status = str(result.get("status", "")).strip().lower()
+            message = str(result.get("message", "")).strip().lower()
+            if status in {"error", "failed", "fail", "02", "2", "nack"} or "negative acknow" in message:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="request_failed",
+                )
 
     def _manufacturer(self, appliance: Mapping[str, Any]) -> str:
         model = str(first_value(appliance, ("MODEL_NO", "modelNumber", "model", "model_number")) or "")

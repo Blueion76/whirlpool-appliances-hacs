@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from homeassistant.components.number import NumberEntity, NumberEntityDescription, NumberMode
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import UnitOfTime, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -56,6 +56,15 @@ def _cavity_prefix(cavity: str | None) -> str:
     return "OvenLowerCavity" if cavity == "lower" else "OvenUpperCavity"
 
 
+def _timer_seconds(flat: Mapping[str, object]) -> int | None:
+    raw = attr_value(flat, "KitchenTimer01_SetTimeSet")
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
     coordinator = entry.runtime_data
     entities = []
@@ -63,13 +72,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
         if not appliance_said(appliance):
             continue
         if is_cooking_appliance(appliance):
-            flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
-            if oven_cavity_exists(flat, "upper"):
-                entities.append(WhirlpoolTargetTemperatureNumber(coordinator, appliance, "upper"))
-            if oven_cavity_exists(flat, "lower"):
-                entities.append(WhirlpoolTargetTemperatureNumber(coordinator, appliance, "lower"))
-        else:
-            entities.append(WhirlpoolTargetTemperatureNumber(coordinator, appliance, None))
+            # Oven target temperature is exposed through the climate entity.
+            entities.append(WhirlpoolKitchenTimerNumber(coordinator, appliance))
+            continue
+        entities.append(WhirlpoolTargetTemperatureNumber(coordinator, appliance, None))
     async_add_entities(entities)
 
 
@@ -122,18 +128,8 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, NumberEntity):
         snapped = _snap_oven_temperature(value, self.temperature_unit)
         celsius = unit_to_celsius(snapped, self.temperature_unit)
 
-        # Whirlpool/Minerva ovens appear to normalize setpoints to whole
-        # Celsius values internally even though status reports tenths of a
-        # Celsius degree. If we send 300°F as 148.9°C, some appliances round or
-        # truncate down to 148.0°C, which comes back as 298.4°F. For Fahrenheit
-        # oven controls, send the nearest whole Celsius degree instead:
-        #
-        #   300°F -> 149.0°C -> 300.2°F
-        #
-        # This is the closest Celsius-native value the appliance can represent.
-        if self.cavity in ("upper", "lower") and self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
-            celsius = float(round(celsius))
-
+        # Match Whirlpool Android app behavior: send exact converted Celsius
+        # value and let the command payload truncate to tenths.
         # Legacy Minerva cooking appliances ignore a bare
         # ``CycleSetTargetTemp`` write for many oven states. Since this
         # integration no longer exposes an oven climate entity, the number
@@ -157,4 +153,30 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, NumberEntity):
                 await self.client.set_target_temperature(self.said, celsius, self.cavity)
             )
 
+        await self.coordinator.async_request_refresh()
+
+
+
+class WhirlpoolKitchenTimerNumber(WhirlpoolApkEntity, NumberEntity):
+    """Typed seconds input for the Whirlpool on-screen kitchen timer."""
+
+    def __init__(self, coordinator, appliance: Mapping[str, object]) -> None:
+        super().__init__(coordinator, appliance, "kitchen_timer_1_set")
+        self.entity_description = NumberEntityDescription(
+            key="kitchen_timer_1_set",
+            translation_key="kitchen_timer_1_set",
+            native_min_value=0,
+            native_max_value=23 * 60 * 60 + 59 * 60 + 59,
+            native_step=1,
+            native_unit_of_measurement=UnitOfTime.SECONDS,
+            mode=NumberMode.BOX,
+        )
+        self._attr_name = entity_name_from_key("kitchen_timer_1_set", appliance)
+
+    @property
+    def native_value(self) -> int | None:
+        return _timer_seconds(self.flat_status)
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._check_service_request(await self.client.set_kitchen_timer(self.said, int(value), 1))
         await self.coordinator.async_request_refresh()

@@ -69,6 +69,9 @@
       },
       "upper_meat_probe": {
         "name": "Upper Oven meat probe"
+      },
+      "firmware_update_available": {
+        "name": "Firmware update available"
       }
     },
     "button": {
@@ -86,11 +89,26 @@
       },
       "sync": {
         "name": "Sync"
+      },
+      "stop_kitchen_timer_1": {
+        "name": "Stop kitchen timer 1"
+      },
+      "check_firmware_update": {
+        "name": "Check firmware update"
       }
     },
     "climate": {
       "climate": {
         "name": "Climate"
+      },
+      "upper_climate": {
+        "name": "Upper oven"
+      },
+      "lower_climate": {
+        "name": "Lower oven"
+      },
+      "oven_climate": {
+        "name": "Oven"
       }
     },
     "light": {
@@ -113,6 +131,9 @@
       },
       "upper_target_temperature_setpoint": {
         "name": "Upper Oven target temperature setpoint"
+      },
+      "kitchen_timer_1_set": {
+        "name": "Kitchen timer 1 set"
       }
     },
     "select": {
@@ -121,6 +142,15 @@
       },
       "refrigerator_temperature_level": {
         "name": "Temperature level"
+      },
+      "oven_cook_mode": {
+        "name": "Oven cook mode"
+      },
+      "upper_cook_mode_select": {
+        "name": "Upper oven cook mode"
+      },
+      "lower_cook_mode_select": {
+        "name": "Lower oven cook mode"
       }
     },
     "sensor": {
@@ -195,6 +225,15 @@
       },
       "end_time": {
         "name": "End time"
+      },
+      "microwave_cook_time_elapsed": {
+        "name": "Microwave cook time elapsed"
+      },
+      "microwave_cook_power": {
+        "name": "Microwave cook power"
+      },
+      "microwave_cook_time_remaining": {
+        "name": "Microwave cook time remaining"
       }
     },
     "switch": {
@@ -206,7 +245,19 @@
       },
       "sabbath_mode": {
         "name": "Sabbath mode"
+      },
+      "time_auto_update": {
+        "name": "Time auto update"
+      },
+      "quiet_mode": {
+        "name": "Quiet mode"
+      },
+      "remote_enable": {
+        "name": "Remote enable"
       }
+    },
+    "firmware_update": {
+      "name": "Firmware"
     }
   },
   "exceptions": {

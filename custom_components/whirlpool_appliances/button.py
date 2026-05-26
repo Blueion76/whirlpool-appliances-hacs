@@ -47,6 +47,14 @@ async def _stop_microwave(client, said: str):
     return await client.stop_microwave(said)
 
 
+async def _stop_kitchen_timer(client, said: str):
+    return await client.stop_kitchen_timer(said, 1)
+
+
+async def _check_firmware_update(client, said: str):
+    return await client.check_firmware_update(said)
+
+
 # Do not expose the legacy /api/v1/appliance/{said}/sync endpoint as a button.
 # On Minerva cooking appliances Whirlpool returns 404 for that endpoint, even
 # though /api/v1/appliance/{said} and STOMP updates work. Keep the method
@@ -54,6 +62,8 @@ async def _stop_microwave(client, said: str):
 BUTTONS = (
     WhirlpoolButtonDescription(key="refresh_status", translation_key="refresh_status", press_fn=_refresh_status),
     WhirlpoolButtonDescription(key="sync_time", translation_key="sync_time", press_fn=_sync_time),
+    WhirlpoolButtonDescription(key="stop_kitchen_timer_1", translation_key="stop_kitchen_timer_1", press_fn=_stop_kitchen_timer),
+    WhirlpoolButtonDescription(key="check_firmware_update", translation_key="check_firmware_update", press_fn=_check_firmware_update),
 )
 
 THING_BUTTONS = (

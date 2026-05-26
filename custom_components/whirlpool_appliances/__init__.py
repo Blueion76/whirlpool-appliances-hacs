@@ -39,6 +39,8 @@ PLATFORMS = [
     Platform.SWITCH,
     Platform.NUMBER,
     Platform.SELECT,
+    Platform.CLIMATE,
+    Platform.UPDATE,
 ]
 
 WhirlpoolApkConfigEntry: TypeAlias = ConfigEntry[WhirlpoolApkCoordinator]
@@ -101,8 +103,13 @@ def _first_coordinator(hass: HomeAssistant) -> WhirlpoolApkCoordinator:
 
 
 def _service_result(result: Any) -> dict[str, Any]:
-    if result is False or (isinstance(result, dict) and str(result.get("status", "")).lower() in {"error", "failed"}):
+    if result is False:
         raise HomeAssistantError(translation_domain=DOMAIN, translation_key="request_failed")
+    if isinstance(result, dict):
+        status = str(result.get("status", "")).strip().lower()
+        message = str(result.get("message", "")).strip().lower()
+        if status in {"error", "failed", "fail", "02", "2", "nack"} or "negative acknow" in message:
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="request_failed")
     return {"result": result}
 
 
@@ -178,9 +185,44 @@ def _register_services(hass: HomeAssistant) -> None:
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
+    async def set_quiet_mode(call: ServiceCall) -> dict[str, Any]:
+        client = _first_client(hass)
+        result = await client.set_quiet_mode(call.data["said"], call.data["on"])
+        await _first_coordinator(hass).async_request_refresh()
+        return _service_result(result)
+
+    async def set_remote_enable(call: ServiceCall) -> dict[str, Any]:
+        client = _first_client(hass)
+        result = await client.set_remote_enable(call.data["said"], call.data["on"])
+        await _first_coordinator(hass).async_request_refresh()
+        return _service_result(result)
+
+    async def set_kitchen_timer(call: ServiceCall) -> dict[str, Any]:
+        client = _first_client(hass)
+        result = await client.set_kitchen_timer(call.data["said"], call.data["seconds"], call.data.get("timer", 1))
+        await _first_coordinator(hass).async_request_refresh()
+        return _service_result(result)
+
+    async def stop_kitchen_timer(call: ServiceCall) -> dict[str, Any]:
+        client = _first_client(hass)
+        result = await client.stop_kitchen_timer(call.data["said"], call.data.get("timer", 1))
+        await _first_coordinator(hass).async_request_refresh()
+        return _service_result(result)
+
+    async def check_firmware_update(call: ServiceCall) -> dict[str, Any]:
+        client = _first_client(hass)
+        result = await client.check_firmware_update(call.data["said"])
+        return _service_result(result)
+
     async def sync_time(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.sync_appliance_time(call.data["said"], call.data.get("timezone"))
+        await _first_coordinator(hass).async_request_refresh()
+        return _service_result(result)
+
+    async def set_time_auto_update(call: ServiceCall) -> dict[str, Any]:
+        client = _first_client(hass)
+        result = await client.set_time_auto_update(call.data["said"], call.data["enabled"], call.data.get("timezone"))
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
@@ -277,9 +319,58 @@ def _register_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN,
+        "set_quiet_mode",
+        set_quiet_mode,
+        schema=vol.Schema({vol.Required("said"): str, vol.Required("on"): bool}),
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "set_remote_enable",
+        set_remote_enable,
+        schema=vol.Schema({vol.Required("said"): str, vol.Required("on"): bool}),
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "set_kitchen_timer",
+        set_kitchen_timer,
+        schema=vol.Schema({
+            vol.Required("said"): str,
+            vol.Required("seconds"): vol.Coerce(int),
+            vol.Optional("timer", default=1): vol.Coerce(int),
+        }),
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "stop_kitchen_timer",
+        stop_kitchen_timer,
+        schema=vol.Schema({
+            vol.Required("said"): str,
+            vol.Optional("timer", default=1): vol.Coerce(int),
+        }),
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "check_firmware_update",
+        check_firmware_update,
+        schema=vol.Schema({vol.Required("said"): str}),
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
         "sync_time",
         sync_time,
         schema=vol.Schema({vol.Required("said"): str, vol.Optional("timezone"): str}),
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "set_time_auto_update",
+        set_time_auto_update,
+        schema=vol.Schema({vol.Required("said"): str, vol.Required("enabled"): bool, vol.Optional("timezone"): str}),
         supports_response=SupportsResponse.ONLY,
     )
     hass.services.async_register(DOMAIN, "refresh", refresh)
