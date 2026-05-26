@@ -32,7 +32,7 @@ This build intentionally removed the extra guessed APK login endpoints and uses 
 
 1. Copy `custom_components/whirlpool_appliances` into your Home Assistant `config/custom_components/` directory.
 2. Restart Home Assistant.
-3. Add integration: **Settings → Devices & services → Add integration → Whirlpool Appliances APK API**.
+3. Add integration: **Settings → Devices & services → Add integration → Whirlpool Appliances**.
 4. Use your Whirlpool app account credentials.
 
 ## Important limitations
