@@ -10,7 +10,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import WhirlpoolApkConfigEntry
-from .api import appliance_said
+from .api import appliance_ddm_key, appliance_said
+from .capabilities import cooking_cavity_capability
 from .entity import WhirlpoolApkEntity, entity_name_from_key, is_cooking_appliance, microwave_exists, oven_cavity_exists
 
 
@@ -77,6 +78,28 @@ COOKING_BUTTONS = (
 )
 
 
+def _parsed_ddm_for_appliance(coordinator, appliance: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    data = coordinator.data or {}
+    ddm_key = appliance_ddm_key(appliance) or appliance.get("DATA_MODEL_KEY") or appliance.get("dataModelKey")
+    capabilities = data.get("ddm_capabilities") or {}
+    if ddm_key and isinstance(capabilities.get(ddm_key), Mapping):
+        parsed = capabilities[ddm_key].get("parsed")
+        if isinstance(parsed, Mapping):
+            return parsed
+    return None
+
+
+def _frozen_bake_foods(coordinator, appliance: Mapping[str, Any], cavity: str) -> list[Mapping[str, Any]]:
+    capability = cooking_cavity_capability(_parsed_ddm_for_appliance(coordinator, appliance), cavity)
+    if not isinstance(capability, Mapping):
+        return []
+    frozen = capability.get("frozen_bake")
+    if not isinstance(frozen, Mapping):
+        return []
+    foods = frozen.get("foods")
+    return [food for food in foods if isinstance(food, Mapping)] if isinstance(foods, list) else []
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
     coordinator = entry.runtime_data
     entities = []
@@ -101,6 +124,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
                 if desc.key == "stop_microwave" and not has_mwo:
                     continue
                 entities.append(WhirlpoolApkButton(coordinator, appliance, desc))
+            for cavity in ("upper", "lower"):
+                if not oven_cavity_exists(flat, cavity):
+                    continue
+                for food in _frozen_bake_foods(coordinator, appliance, cavity):
+                    entities.append(WhirlpoolFrozenBakeButton(coordinator, appliance, cavity, food))
     async_add_entities(entities)
 
 
@@ -116,4 +144,34 @@ class WhirlpoolApkButton(WhirlpoolApkEntity, ButtonEntity):
     async def async_press(self) -> None:
         target = self.coordinator if self._use_coordinator else self.client
         self._check_service_request(await self.entity_description.press_fn(target, self.said))
+        await self.coordinator.async_request_refresh()
+
+
+
+class WhirlpoolFrozenBakeButton(WhirlpoolApkEntity, ButtonEntity):
+    """Start a Frozen Bake food cycle with DDM default temperature/time."""
+
+    def __init__(self, coordinator, appliance: Mapping[str, Any], cavity: str, food: Mapping[str, Any]) -> None:
+        self.cavity = cavity
+        self.food = str(food.get("food"))
+        temp = food.get("target_temperature") if isinstance(food.get("target_temperature"), Mapping) else {}
+        cook_time = food.get("cook_time") if isinstance(food.get("cook_time"), Mapping) else {}
+        self.temperature_c = float(temp.get("default_c") or 204.4)
+        self.cook_time_seconds = int(cook_time.get("default") or cook_time.get("min") or 600)
+        suffix = f"{cavity}_frozen_bake_{self.food}"
+        super().__init__(coordinator, appliance, suffix)
+        self._attr_name = entity_name_from_key(suffix, appliance)
+        self._attr_translation_key = suffix
+        self._attr_icon = "mdi:snowflake"
+
+    async def async_press(self) -> None:
+        self._check_service_request(
+            await self.client.set_oven_frozen_bake(
+                self.said,
+                self.food,
+                self.temperature_c,
+                self.cook_time_seconds,
+                self.cavity,
+            )
+        )
         await self.coordinator.async_request_refresh()

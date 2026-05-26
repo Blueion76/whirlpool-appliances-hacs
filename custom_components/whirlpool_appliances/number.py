@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 
 from homeassistant.components.number import NumberEntity, NumberEntityDescription, NumberMode
 from homeassistant.const import UnitOfTime, UnitOfTemperature
@@ -65,6 +66,15 @@ def _timer_seconds(flat: Mapping[str, object]) -> int | None:
     return value if value > 0 else None
 
 
+def _seconds_value(flat: Mapping[str, object], attr: str) -> int | None:
+    raw = attr_value(flat, attr)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
     coordinator = entry.runtime_data
     entities = []
@@ -72,7 +82,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
         if not appliance_said(appliance):
             continue
         if is_cooking_appliance(appliance):
-            # Oven target temperature is exposed through the climate entity.
+            flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
+            if oven_cavity_exists(flat, "upper"):
+                entities.append(WhirlpoolOvenTimeNumber(coordinator, appliance, "upper", "cook_time"))
+                entities.append(WhirlpoolOvenTimeNumber(coordinator, appliance, "upper", "delay_time"))
+            if oven_cavity_exists(flat, "lower"):
+                entities.append(WhirlpoolOvenTimeNumber(coordinator, appliance, "lower", "cook_time"))
+                entities.append(WhirlpoolOvenTimeNumber(coordinator, appliance, "lower", "delay_time"))
             entities.append(WhirlpoolKitchenTimerNumber(coordinator, appliance))
             continue
         # Phase 7 safety guard: do not expose generic writable setpoints for
@@ -157,6 +173,42 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, NumberEntity):
                 await self.client.set_target_temperature(self.said, celsius, self.cavity)
             )
 
+        await self.coordinator.async_request_refresh()
+
+
+
+class WhirlpoolOvenTimeNumber(WhirlpoolApkEntity, NumberEntity):
+    """Oven cook-time and delay-time number entities."""
+
+    def __init__(self, coordinator, appliance: Mapping[str, object], cavity: str, kind: str) -> None:
+        self.cavity = cavity
+        self.kind = kind
+        suffix = f"{cavity}_oven_{kind}"
+        super().__init__(coordinator, appliance, suffix)
+        self.entity_description = NumberEntityDescription(
+            key=suffix,
+            translation_key=suffix,
+            icon="mdi:timer" if kind == "cook_time" else "mdi:timer-outline",
+            native_min_value=0,
+            native_max_value=43140,
+            native_step=60,
+            native_unit_of_measurement=UnitOfTime.SECONDS,
+            mode=NumberMode.BOX,
+        )
+        self._attr_name = entity_name_from_key(suffix, appliance)
+
+    @property
+    def native_value(self) -> int | None:
+        prefix = _cavity_prefix(self.cavity)
+        attr = f"{prefix}_TimeSetCookTimeSet" if self.kind == "cook_time" else f"{prefix}_TimeSetDelayTime"
+        return _seconds_value(self.flat_status, attr)
+
+    async def async_set_native_value(self, value: float) -> None:
+        prefix = _cavity_prefix(self.cavity)
+        attrs = {
+            (f"{prefix}_TimeSetCookTimeSet" if self.kind == "cook_time" else f"{prefix}_TimeSetDelayTime"): str(max(0, int(value)))
+        }
+        self._check_service_request(await self.client.send_attributes(self.said, attrs))
         await self.coordinator.async_request_refresh()
 
 

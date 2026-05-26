@@ -40,6 +40,17 @@ OVEN_MODE_NAME_TO_SERVICE = {
     "Air Fry": "air_fry",
 }
 OVEN_MODE_OPTIONS = list(OVEN_MODE_CODE_TO_NAME.values())
+OVEN_COMPLETE_ACTION_CODE_TO_NAME = {
+    "1": "Stay On",
+    "2": "Keep Warm",
+    "3": "Turn Off",
+}
+OVEN_COMPLETE_ACTION_NAME_TO_SERVICE = {
+    "Stay On": "stay_on",
+    "Keep Warm": "keep_warm",
+    "Turn Off": "turn_off",
+}
+OVEN_COMPLETE_ACTION_NAME_TO_CODE = {name: code for code, name in OVEN_COMPLETE_ACTION_CODE_TO_NAME.items()}
 LIMITED_OVEN_MODE_OPTIONS_BY_MODEL = {
     "WOC54EC0HS00": ["Bake", "Broil", "Keep Warm"],
 }
@@ -100,13 +111,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
         # DDM_COOKING_MINERVA_COMBO_BIO5_V1 expose oven/microwave mode attributes
         # instead, so a generic cycle selector is misleading and cannot work.
         if is_cooking_appliance(appliance):
-            # Oven cooking mode is exposed through the oven climate entity preset mode.
-            pass
+            flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
+            if oven_cavity_exists(flat, "upper"):
+                entities.append(WhirlpoolOvenCompleteActionSelect(coordinator, appliance, "upper"))
+            if oven_cavity_exists(flat, "lower"):
+                entities.append(WhirlpoolOvenCompleteActionSelect(coordinator, appliance, "lower"))
         else:
             entities.append(WhirlpoolCycleSelect(coordinator, appliance))
         if is_refrigerator_appliance(appliance):
             entities.append(WhirlpoolRefrigeratorTemperatureSelect(coordinator, appliance))
     async_add_entities(entities)
+
+
+class WhirlpoolOvenCompleteActionSelect(WhirlpoolApkEntity, SelectEntity):
+    """Cook-time complete action selector."""
+
+    _attr_translation_key = "oven_complete_action"
+
+    def __init__(self, coordinator, appliance: Mapping[str, Any], cavity: str | None) -> None:
+        self.cavity = cavity
+        self._attr_options = list(OVEN_COMPLETE_ACTION_CODE_TO_NAME.values())
+        suffix = f"{cavity}_oven_complete_action" if cavity else "oven_complete_action"
+        super().__init__(coordinator, appliance, suffix)
+        self._attr_name = entity_name_from_key(suffix, appliance)
+
+    @property
+    def current_option(self) -> str | None:
+        raw = attr_value(self.flat_status, f"{_cavity_prefix(self.cavity)}_OpSetCookTimeCompleteAction")
+        if raw in (None, "", "0", 0):
+            return "Turn Off"
+        return OVEN_COMPLETE_ACTION_CODE_TO_NAME.get(str(raw), f"Action {raw}")
+
+    async def async_select_option(self, option: str) -> None:
+        code = OVEN_COMPLETE_ACTION_NAME_TO_CODE.get(option)
+        if code is None:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
+        self._check_service_request(
+            await self.client.send_attributes(
+                self.said,
+                {f"{_cavity_prefix(self.cavity)}_OpSetCookTimeCompleteAction": code},
+            )
+        )
+        await self.coordinator.async_request_refresh()
+
 
 
 class WhirlpoolOvenModeSelect(WhirlpoolApkEntity, SelectEntity):

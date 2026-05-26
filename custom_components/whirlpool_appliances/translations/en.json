@@ -125,6 +125,42 @@
       },
       "check_firmware_update": {
         "name": "Check firmware update"
+      },
+      "upper_frozen_bake_pizza": {
+        "name": "Start upper Frozen Bake pizza"
+      },
+      "upper_frozen_bake_pie": {
+        "name": "Start upper Frozen Bake pie"
+      },
+      "upper_frozen_bake_meals": {
+        "name": "Start upper Frozen Bake meals"
+      },
+      "upper_frozen_bake_fries": {
+        "name": "Start upper Frozen Bake fries"
+      },
+      "upper_frozen_bake_nuggets": {
+        "name": "Start upper Frozen Bake nuggets"
+      },
+      "upper_frozen_bake_lasagna": {
+        "name": "Start upper Frozen Bake lasagna"
+      },
+      "lower_frozen_bake_pizza": {
+        "name": "Start lower Frozen Bake pizza"
+      },
+      "lower_frozen_bake_pie": {
+        "name": "Start lower Frozen Bake pie"
+      },
+      "lower_frozen_bake_meals": {
+        "name": "Start lower Frozen Bake meals"
+      },
+      "lower_frozen_bake_fries": {
+        "name": "Start lower Frozen Bake fries"
+      },
+      "lower_frozen_bake_nuggets": {
+        "name": "Start lower Frozen Bake nuggets"
+      },
+      "lower_frozen_bake_lasagna": {
+        "name": "Start lower Frozen Bake lasagna"
       }
     },
     "climate": {
@@ -164,6 +200,18 @@
       },
       "kitchen_timer_1_set": {
         "name": "Kitchen timer 1 set"
+      },
+      "upper_oven_cook_time": {
+        "name": "Upper oven cook time"
+      },
+      "upper_oven_delay_time": {
+        "name": "Upper oven delay time"
+      },
+      "lower_oven_cook_time": {
+        "name": "Lower oven cook time"
+      },
+      "lower_oven_delay_time": {
+        "name": "Lower oven delay time"
       }
     },
     "select": {
@@ -181,6 +229,12 @@
       },
       "lower_cook_mode_select": {
         "name": "Lower oven cook mode"
+      },
+      "upper_oven_complete_action": {
+        "name": "Upper oven complete action"
+      },
+      "lower_oven_complete_action": {
+        "name": "Lower oven complete action"
       }
     },
     "sensor": {
