@@ -68,7 +68,9 @@ set_cavity_light:
       required: false
       selector:
         text:
-    "on":
+    enabled:
+      name: Enabled
+      description: Turn this feature on or off.
       required: true
       selector:
         boolean:
@@ -294,6 +296,8 @@ set_time_auto_update:
       selector:
         text:
     enabled:
+      name: Enabled
+      description: Turn this feature on or off.
       required: true
       selector:
         boolean:
@@ -395,7 +399,9 @@ set_quiet_mode:
       required: false
       selector:
         text:
-    "on":
+    enabled:
+      name: Enabled
+      description: Turn this feature on or off.
       required: true
       selector:
         boolean:
@@ -416,7 +422,9 @@ set_remote_enable:
       required: false
       selector:
         text:
-    "on":
+    enabled:
+      name: Enabled
+      description: Turn this feature on or off.
       required: true
       selector:
         boolean:
