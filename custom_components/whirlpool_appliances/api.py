@@ -832,11 +832,12 @@ class WhirlpoolCloudClient:
             complete_action,
             complete,
         )
-        if cook_time_seconds is not None:
-            attrs[f"{prefix}_TimeSetCookTimeSet"] = str(max(0, int(cook_time_seconds)))
-        if delay_time_seconds is not None:
-            attrs[f"{prefix}_TimeSetDelayTime"] = str(max(0, int(delay_time_seconds)))
+        if cook_time_seconds is not None and int(cook_time_seconds) > 0:
+            attrs[f"{prefix}_TimeSetCookTimeSet"] = str(int(cook_time_seconds))
+        if delay_time_seconds is not None and int(delay_time_seconds) > 0:
+            attrs[f"{prefix}_TimeSetDelayTime"] = str(int(delay_time_seconds))
 
+        _LOGGER.debug("Final Whirlpool oven cook attributes: said=%s cavity=%s attrs=%s", said, cavity or "upper", summarize(attrs))
         return await self.send_attributes(said, attrs)
 
     async def set_oven_frozen_bake(

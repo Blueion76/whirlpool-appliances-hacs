@@ -76,12 +76,19 @@ def minutes_value(flat: Mapping[str, Any], attr: str) -> float | None:
 
 
 def minutes_to_seconds(value: Any) -> int | None:
+    """Convert positive minutes to seconds for Whirlpool commands.
+
+    A value of 0 means "not set" for optional oven cook/delay times. Do not send
+    TimeSetCookTimeSet=0 or TimeSetDelayTime=0 with normal Start Oven commands
+    because some Minerva ovens reject that full payload with status 02/NACK.
+    """
     if value in (None, ""):
         return None
     try:
-        return max(0, int(round(float(value) * 60)))
+        seconds = int(round(float(value) * 60))
     except (TypeError, ValueError):
         return None
+    return seconds if seconds > 0 else None
 
 
 def _store(coordinator) -> dict[tuple[str, str], dict[str, Any]]:

@@ -226,12 +226,12 @@ def _register_services(hass: HomeAssistant) -> None:
             call.data.get("cavity", "upper"),
             cook_time_seconds=(
                 int(round(float(call.data["cook_time_minutes"]) * 60))
-                if "cook_time_minutes" in call.data
+                if "cook_time_minutes" in call.data and float(call.data["cook_time_minutes"]) > 0
                 else None
             ),
             delay_time_seconds=(
                 int(round(float(call.data["delay_time_minutes"]) * 60))
-                if "delay_time_minutes" in call.data
+                if "delay_time_minutes" in call.data and float(call.data["delay_time_minutes"]) > 0
                 else None
             ),
             complete_action=call.data.get("complete_action", "turn_off"),
