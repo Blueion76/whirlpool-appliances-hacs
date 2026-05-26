@@ -356,5 +356,10 @@
     "invalid_value_set": {
       "message": "The selected Whirlpool value is not valid for this appliance."
     }
+  },
+  "services": {
+    "set_oven_frozen_bake": {
+      "name": "Start Frozen Bake"
+    }
   }
 }
