@@ -14,7 +14,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import WhirlpoolApkConfigEntry
 from .api import appliance_said
 from .entity import WhirlpoolApkEntity, entity_name_from_key, is_cooking_appliance, microwave_exists, oven_cavity_exists
-from .oven_options import current_oven_options, oven_is_active
+from .oven_options import current_oven_options, minutes_to_seconds, oven_is_active
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -145,6 +145,12 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
         self.cavity = cavity
         super().__init__(coordinator, appliance, description)
 
+        # Microwave/oven combos normally expose a single oven cavity named
+        # "upper" in the raw API. In Home Assistant that reads awkwardly as
+        # "Start Upper Oven", so show "Start Oven" when there is no lower oven.
+        if cavity == "upper" and not oven_cavity_exists(self.flat_status, "lower"):
+            self._attr_name = "Start Oven"
+
     async def async_press(self) -> None:
         self._check_service_request(await self.async_start_oven())
         await self.coordinator.async_request_refresh()
@@ -160,7 +166,7 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
                 self.said,
                 str(options["frozen_food"]),
                 float(options["target_temp"]),
-                int(options.get("cook_time_seconds") or 600),
+                minutes_to_seconds(options.get("cook_time_minutes") or 10) or 600,
                 self.cavity,
                 complete_action=str(options["complete_action"]),
             )
@@ -170,7 +176,7 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
             float(options["target_temp"]),
             str(options["mode"]),
             self.cavity,
-            cook_time_seconds=options.get("cook_time_seconds"),
-            delay_time_seconds=options.get("delay_time_seconds"),
+            cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")),
+            delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
             complete_action=str(options["complete_action"]),
         )

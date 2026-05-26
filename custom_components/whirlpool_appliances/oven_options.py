@@ -63,13 +63,25 @@ def temp_from_tenths(value: Any) -> float | None:
             return None
 
 
-def seconds_value(flat: Mapping[str, Any], attr: str) -> int | None:
+def minutes_value(flat: Mapping[str, Any], attr: str) -> float | None:
     raw = attr_value(flat, attr)
     try:
-        value = int(raw)
+        seconds = int(raw)
     except (TypeError, ValueError):
         return None
-    return value if value >= 0 else None
+    if seconds < 0:
+        return None
+    minutes = seconds / 60
+    return int(minutes) if minutes.is_integer() else round(minutes, 1)
+
+
+def minutes_to_seconds(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return max(0, int(round(float(value) * 60)))
+    except (TypeError, ValueError):
+        return None
 
 
 def _store(coordinator) -> dict[tuple[str, str], dict[str, Any]]:
@@ -113,8 +125,8 @@ def current_oven_options(coordinator, said: str, cavity: str | None, flat: Mappi
     options: dict[str, Any] = {
         "mode": mode,
         "target_temp": target_temp,
-        "cook_time_seconds": seconds_value(flat, f"{prefix}_TimeSetCookTimeSet"),
-        "delay_time_seconds": seconds_value(flat, f"{prefix}_TimeSetDelayTime"),
+        "cook_time_minutes": minutes_value(flat, f"{prefix}_TimeSetCookTimeSet"),
+        "delay_time_minutes": minutes_value(flat, f"{prefix}_TimeSetDelayTime"),
         "complete_action": complete_action,
         "frozen_food": None,
     }

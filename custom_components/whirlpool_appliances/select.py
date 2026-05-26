@@ -16,7 +16,7 @@ from . import WhirlpoolApkConfigEntry
 from .const import DOMAIN
 from .api import appliance_said
 from .entity import WhirlpoolApkEntity, attr_value, entity_name_from_key, find_key, is_cooking_appliance, is_refrigerator_appliance, oven_cavity_exists
-from .oven_options import FROZEN_BAKE_FOOD_OPTIONS, current_oven_options, local_options, oven_is_active, update_local_options
+from .oven_options import FROZEN_BAKE_FOOD_OPTIONS, current_oven_options, local_options, minutes_to_seconds, oven_is_active, update_local_options
 
 REFRIGERATOR_TEMP_MAP = {-4: "12", -2: "11", 0: "10", 3: "9", 5: "8"}
 REFRIGERATOR_TEMP_MAP_REVERSED = {value: str(key) for key, value in REFRIGERATOR_TEMP_MAP.items()}
@@ -199,8 +199,8 @@ class WhirlpoolOvenCompleteActionSelect(WhirlpoolApkEntity, SelectEntity):
                     float(options["target_temp"]),
                     str(options["mode"]),
                     self.cavity,
-                    cook_time_seconds=options.get("cook_time_seconds"),
-                    delay_time_seconds=options.get("delay_time_seconds"),
+                    cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")),
+                    delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
                     complete_action=str(options["complete_action"]),
                 )
             )
@@ -262,8 +262,8 @@ class WhirlpoolOvenModeSelect(WhirlpoolApkEntity, SelectEntity):
                     float(options["target_temp"]),
                     str(options["mode"]),
                     self.cavity,
-                    cook_time_seconds=options.get("cook_time_seconds"),
-                    delay_time_seconds=options.get("delay_time_seconds"),
+                    cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")),
+                    delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
                     complete_action=str(options["complete_action"]),
                 )
             )

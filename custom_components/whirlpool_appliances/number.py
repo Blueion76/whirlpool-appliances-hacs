@@ -14,7 +14,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import WhirlpoolApkConfigEntry
 from .api import appliance_said
 from .entity import WhirlpoolApkEntity, attr_value, celsius_to_unit, entity_name_from_key, find_key, is_cooking_appliance, oven_cavity_exists, unit_to_celsius
-from .oven_options import current_oven_options, local_options, oven_is_active, update_local_options
+from .oven_options import current_oven_options, local_options, minutes_to_seconds, oven_is_active, update_local_options
 
 
 def _temp_from_tenths(value) -> float | None:
@@ -81,6 +81,17 @@ def _seconds_value(flat: Mapping[str, object], attr: str) -> int | None:
     except (TypeError, ValueError):
         return None
     return value if value >= 0 else None
+
+
+def _seconds_to_minutes(value: int | None) -> float | None:
+    if value is None:
+        return None
+    minutes = value / 60
+    return int(minutes) if minutes.is_integer() else round(minutes, 1)
+
+
+def _minutes_to_seconds(value: float) -> int:
+    return max(0, int(round(float(value) * 60)))
 
 
 def _oven_is_active(flat: Mapping[str, object], cavity: str | None) -> bool:
@@ -198,8 +209,8 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, NumberEntity):
                     float(options["target_temp"]),
                     str(options["mode"]),
                     self.cavity,
-                    cook_time_seconds=options.get("cook_time_seconds"),
-                    delay_time_seconds=options.get("delay_time_seconds"),
+                    cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")),
+                    delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
                     complete_action=str(options["complete_action"]),
                 )
             )
@@ -225,9 +236,9 @@ class WhirlpoolOvenTimeNumber(WhirlpoolApkEntity, NumberEntity):
             translation_key=suffix,
             icon="mdi:timer" if kind == "cook_time" else "mdi:timer-outline",
             native_min_value=0,
-            native_max_value=43140,
-            native_step=60,
-            native_unit_of_measurement=UnitOfTime.SECONDS,
+            native_max_value=719,
+            native_step=1,
+            native_unit_of_measurement=UnitOfTime.MINUTES,
             mode=NumberMode.BOX,
         )
         self._attr_name = entity_name_from_key(suffix, appliance)
@@ -235,16 +246,16 @@ class WhirlpoolOvenTimeNumber(WhirlpoolApkEntity, NumberEntity):
     @property
     def native_value(self) -> int | None:
         local = local_options(self.coordinator, self.said, self.cavity)
-        local_key = "cook_time_seconds" if self.kind == "cook_time" else "delay_time_seconds"
+        local_key = "cook_time_minutes" if self.kind == "cook_time" else "delay_time_minutes"
         if local_key in local:
-            return int(local[local_key])
+            return float(local[local_key])
         prefix = _cavity_prefix(self.cavity)
         attr = f"{prefix}_TimeSetCookTimeSet" if self.kind == "cook_time" else f"{prefix}_TimeSetDelayTime"
-        return _seconds_value(self.flat_status, attr)
+        return _seconds_to_minutes(_seconds_value(self.flat_status, attr))
 
     async def async_set_native_value(self, value: float) -> None:
         prefix = _cavity_prefix(self.cavity)
-        seconds = max(0, int(value))
+        minutes = max(0, float(value))
         attr = f"{prefix}_TimeSetCookTimeSet" if self.kind == "cook_time" else f"{prefix}_TimeSetDelayTime"
 
         # Whirlpool applies cook-time/delay-time as part of the complete oven
@@ -254,9 +265,9 @@ class WhirlpoolOvenTimeNumber(WhirlpoolApkEntity, NumberEntity):
         if oven_is_active(self.flat_status, self.cavity):
             options = current_oven_options(self.coordinator, self.said, self.cavity, self.flat_status)
             if self.kind == "cook_time":
-                options["cook_time_seconds"] = seconds
+                options["cook_time_minutes"] = minutes
             else:
-                options["delay_time_seconds"] = seconds
+                options["delay_time_minutes"] = minutes
 
             self._check_service_request(await self.client.stop_oven_cavity(self.said, self.cavity))
             await asyncio.sleep(1)
@@ -266,8 +277,8 @@ class WhirlpoolOvenTimeNumber(WhirlpoolApkEntity, NumberEntity):
                     float(options["target_temp"]),
                     str(options["mode"]),
                     self.cavity,
-                    cook_time_seconds=options.get("cook_time_seconds"),
-                    delay_time_seconds=options.get("delay_time_seconds"),
+                    cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")),
+                    delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
                     complete_action=str(options["complete_action"]),
                 )
             )
@@ -275,9 +286,9 @@ class WhirlpoolOvenTimeNumber(WhirlpoolApkEntity, NumberEntity):
             return
 
         if self.kind == "cook_time":
-            update_local_options(self.coordinator, self.said, self.cavity, cook_time_seconds=seconds)
+            update_local_options(self.coordinator, self.said, self.cavity, cook_time_minutes=minutes)
         else:
-            update_local_options(self.coordinator, self.said, self.cavity, delay_time_seconds=seconds)
+            update_local_options(self.coordinator, self.said, self.cavity, delay_time_minutes=minutes)
         self.async_write_ha_state()
 
 

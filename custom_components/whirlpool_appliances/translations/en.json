@@ -127,7 +127,7 @@
         "name": "Check firmware update"
       },
       "start_upper_oven": {
-        "name": "Start Upper Oven"
+        "name": "Start Oven"
       },
       "start_lower_oven": {
         "name": "Start Lower Oven"

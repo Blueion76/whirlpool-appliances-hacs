@@ -213,26 +213,26 @@ set_oven_cook:
             - bake
             - broil
             - keep_warm
-    cook_time_seconds:
+    cook_time_minutes:
       name: Cook time
-      description: Optional oven cook time in seconds.
+      description: Optional oven cook time in minutes.
       required: false
       selector:
         number:
           min: 0
-          max: 43140
-          step: 60
-          unit_of_measurement: s
-    delay_time_seconds:
+          max: 719
+          step: 1
+          unit_of_measurement: min
+    delay_time_minutes:
       name: Delay time
-      description: Optional delay start time in seconds.
+      description: Optional delay start time in minutes.
       required: false
       selector:
         number:
           min: 0
-          max: 43140
-          step: 60
-          unit_of_measurement: s
+          max: 719
+          step: 1
+          unit_of_measurement: min
     complete_action:
       name: Complete action
       description: What the oven should do when cook time completes.
@@ -256,7 +256,7 @@ set_oven_cook:
 
 set_oven_frozen_bake:
   name: Start Frozen Bake
-  description: Start a Whirlpool Frozen Bake automatic oven cycle. Temperature is Celsius and cook time is seconds.
+  description: Start a Whirlpool Frozen Bake automatic oven cycle. Temperature is Celsius and cook time is minutes.
   fields:
     appliance_device:
       name: Appliance device
@@ -293,16 +293,16 @@ set_oven_frozen_bake:
           max: 300
           step: 0.1
           unit_of_measurement: °C
-    cook_time_seconds:
+    cook_time_minutes:
       name: Cook time
-      description: Required Frozen Bake cook time in seconds.
+      description: Required Frozen Bake cook time in minutes.
       required: true
       selector:
         number:
           min: 0
-          max: 43140
-          step: 60
-          unit_of_measurement: s
+          max: 719
+          step: 1
+          unit_of_measurement: min
     complete_action:
       name: Complete action
       description: What the oven should do when cook time completes.
