@@ -294,6 +294,8 @@ class WhirlpoolOvenModeSelect(WhirlpoolApkEntity, SelectEntity):
             for name, mapped in OVEN_MODE_NAME_TO_SERVICE.items():
                 if mapped == service:
                     return name
+        if not oven_is_active(self.flat_status, self.cavity):
+            return "Bake"
         raw = attr_value(self.flat_status, f"{_cavity_prefix(self.cavity)}_CycleSetCommonMode")
         if raw is None:
             return "Bake"

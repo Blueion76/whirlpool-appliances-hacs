@@ -187,6 +187,9 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, NumberEntity):
                 value = float(raw) if raw is not None else None
             except (TypeError, ValueError):
                 value = None
+        if value is None and self.cavity in ("upper", "lower"):
+            # Idle/default oven setpoint: 175°F = 79.4°C.
+            value = 79.4
         if value is None:
             return None
         display_value = celsius_to_unit(value, self.temperature_unit)
