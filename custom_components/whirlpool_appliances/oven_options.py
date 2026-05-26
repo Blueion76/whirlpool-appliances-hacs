@@ -40,7 +40,7 @@ OVEN_COMPLETE_ACTION_NAME_TO_SERVICE = {
     name: service for service, name in OVEN_COMPLETE_ACTION_SERVICE_TO_NAME.items()
 }
 
-FROZEN_BAKE_FOOD_OPTIONS = ["None", "pizza", "pie", "meals", "fries", "nuggets", "lasagna"]
+FROZEN_BAKE_FOOD_OPTIONS = ["None", "Pizza", "Pie", "Meals", "Fries", "Nuggets", "Lasagna"]
 
 
 def cavity_prefix(cavity: str | None) -> str:

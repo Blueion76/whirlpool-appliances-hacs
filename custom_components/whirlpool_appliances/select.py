@@ -288,7 +288,8 @@ class WhirlpoolFrozenBakePresetSelect(WhirlpoolApkEntity, SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        return str(local_options(self.coordinator, self.said, self.cavity).get("frozen_food") or "None")
+        food = local_options(self.coordinator, self.said, self.cavity).get("frozen_food")
+        return str(food).replace("_", " ").title() if food else "None"
 
     async def async_select_option(self, option: str) -> None:
         if option not in FROZEN_BAKE_FOOD_OPTIONS:
@@ -297,7 +298,7 @@ class WhirlpoolFrozenBakePresetSelect(WhirlpoolApkEntity, SelectEntity):
             self.coordinator,
             self.said,
             self.cavity,
-            frozen_food=None if option == "None" else option,
+            frozen_food=None if option == "None" else option.lower().replace(" ", "_"),
         )
         self.async_write_ha_state()
 
