@@ -10,7 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_REGION, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
-from homeassistant.helpers import selector
+from homeassistant.helpers import entity_registry as er, selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import WhirlpoolAccountLockedError, WhirlpoolApiError, WhirlpoolAuthError, WhirlpoolCloudClient
@@ -103,6 +103,47 @@ def _first_coordinator(hass: HomeAssistant) -> WhirlpoolApkCoordinator:
     return next(iter(entries.values()))[DATA_COORDINATOR]
 
 
+def _appliance_said_from_entity(hass: HomeAssistant, entity_id: str) -> str | None:
+    """Resolve a Whirlpool SAID from one of this integration's entity IDs."""
+    registry = er.async_get(hass)
+    entry = registry.async_get(entity_id)
+    if not entry or not entry.unique_id:
+        return None
+
+    # WhirlpoolApkEntity unique IDs are built as "<SAID>_<entity suffix>".
+    # SAIDs can contain underscores on some platforms, so prefer matching
+    # against the coordinator's known appliance IDs instead of splitting.
+    for domain_data in hass.data.get(DOMAIN, {}).values():
+        coordinator = domain_data.get(DATA_COORDINATOR)
+        for appliance in (coordinator.data or {}).get("appliances", []):
+            said = (
+                appliance.get("SAID")
+                or appliance.get("said")
+                or appliance.get("applianceId")
+                or appliance.get("_id")
+            )
+            if said and str(entry.unique_id).startswith(f"{said}_"):
+                return str(said)
+    return None
+
+
+def _service_said(hass: HomeAssistant, call: ServiceCall) -> str:
+    """Return SAID from either explicit said or a selected Whirlpool entity."""
+    said = call.data.get("said")
+    if said:
+        return str(said)
+
+    entity_id = call.data.get("entity_id")
+    if entity_id:
+        if isinstance(entity_id, list):
+            entity_id = entity_id[0]
+        resolved = _appliance_said_from_entity(hass, str(entity_id))
+        if resolved:
+            return resolved
+
+    raise HomeAssistantError("Select a Whirlpool entity or enter a SAID")
+
+
 def _service_result(result: Any) -> dict[str, Any]:
     if result is False:
         raise HomeAssistantError(translation_domain=DOMAIN, translation_key="request_failed")
@@ -134,7 +175,7 @@ def _register_services(hass: HomeAssistant) -> None:
     async def send_command(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.send_appliance_command(
-            call.data["said"],
+            _service_said(hass, call),
             call.data.get("command", "setAttributes"),
             call.data.get("attributes"),
             call.data.get("raw"),
@@ -144,14 +185,14 @@ def _register_services(hass: HomeAssistant) -> None:
 
     async def set_cavity_light(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.set_cavity_light(call.data["said"], call.data["on"], call.data.get("cavity"))
+        result = await client.set_cavity_light(_service_said(hass, call), call.data["on"], call.data.get("cavity"))
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
     async def publish_thing_command(call: ServiceCall) -> dict[str, Any]:
         coordinator = _first_coordinator(hass)
         result = await coordinator.async_publish_thing_command(
-            call.data["said"],
+            _service_said(hass, call),
             call.data.get("command", "getState"),
             call.data.get("payload"),
         )
@@ -159,14 +200,14 @@ def _register_services(hass: HomeAssistant) -> None:
 
     async def set_attributes(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.send_attributes(call.data["said"], call.data["attributes"])
+        result = await client.send_attributes(_service_said(hass, call), call.data["attributes"])
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
     async def set_oven_cook(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.set_oven_cook(
-            call.data["said"],
+            _service_said(hass, call),
             call.data["temperature"],
             call.data.get("mode", "bake"),
             call.data.get("cavity", "upper"),
@@ -176,54 +217,54 @@ def _register_services(hass: HomeAssistant) -> None:
 
     async def stop_oven_cavity(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.stop_oven_cavity(call.data["said"], call.data.get("cavity", "upper"))
+        result = await client.stop_oven_cavity(_service_said(hass, call), call.data.get("cavity", "upper"))
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
     async def stop_microwave(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.stop_microwave(call.data["said"])
+        result = await client.stop_microwave(_service_said(hass, call))
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
     async def set_quiet_mode(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.set_quiet_mode(call.data["said"], call.data["on"])
+        result = await client.set_quiet_mode(_service_said(hass, call), call.data["on"])
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
     async def set_remote_enable(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.set_remote_enable(call.data["said"], call.data["on"])
+        result = await client.set_remote_enable(_service_said(hass, call), call.data["on"])
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
     async def set_kitchen_timer(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.set_kitchen_timer(call.data["said"], call.data["seconds"], call.data.get("timer", 1))
+        result = await client.set_kitchen_timer(_service_said(hass, call), call.data["seconds"], call.data.get("timer", 1))
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
     async def stop_kitchen_timer(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.stop_kitchen_timer(call.data["said"], call.data.get("timer", 1))
+        result = await client.stop_kitchen_timer(_service_said(hass, call), call.data.get("timer", 1))
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
     async def check_firmware_update(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.check_firmware_update(call.data["said"])
+        result = await client.check_firmware_update(_service_said(hass, call))
         return _service_result(result)
 
     async def sync_time(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.sync_appliance_time(call.data["said"], call.data.get("timezone"))
+        result = await client.sync_appliance_time(_service_said(hass, call), call.data.get("timezone"))
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
     async def set_time_auto_update(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.set_time_auto_update(call.data["said"], call.data["enabled"], call.data.get("timezone"))
+        result = await client.set_time_auto_update(_service_said(hass, call), call.data["enabled"], call.data.get("timezone"))
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
@@ -235,7 +276,7 @@ def _register_services(hass: HomeAssistant) -> None:
         path_values = dict(call.data.get("path_values") or {})
         result = await client.call_function(
             call.data["function"],
-            said=call.data.get("said"),
+            said=_service_said(hass, call),
             body=call.data.get("body"),
             **path_values,
         )
@@ -247,35 +288,35 @@ def _register_services(hass: HomeAssistant) -> None:
         "call_api",
         call_api,
         schema=vol.Schema({vol.Required("path"): str, vol.Optional("method", default="GET"): str, vol.Optional("body"): object, vol.Optional("params"): object}),
-        supports_response=SupportsResponse.ONLY,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "send_appliance_command",
         send_command,
-        schema=vol.Schema({vol.Required("said"): str, vol.Optional("command", default="setAttributes"): str, vol.Optional("attributes"): object, vol.Optional("raw"): object}),
-        supports_response=SupportsResponse.ONLY,
+        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Optional("command", default="setAttributes"): str, vol.Optional("attributes"): object, vol.Optional("raw"): object}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "set_cavity_light",
         set_cavity_light,
-        schema=vol.Schema({vol.Required("said"): str, vol.Required("on"): bool, vol.Optional("cavity"): str}),
-        supports_response=SupportsResponse.ONLY,
+        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Required("on"): bool, vol.Optional("cavity"): str}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "publish_thing_command",
         publish_thing_command,
-        schema=vol.Schema({vol.Required("said"): str, vol.Optional("command", default="getState"): str, vol.Optional("payload"): object}),
-        supports_response=SupportsResponse.ONLY,
+        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Optional("command", default="getState"): str, vol.Optional("payload"): object}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "set_attributes",
         set_attributes,
-        schema=vol.Schema({vol.Required("said"): str, vol.Required("attributes"): dict}),
-        supports_response=SupportsResponse.ONLY,
+        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Required("attributes"): dict}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
@@ -283,7 +324,7 @@ def _register_services(hass: HomeAssistant) -> None:
         set_oven_cook,
         schema=vol.Schema(
             {
-                vol.Required("said"): str,
+                vol.Optional("entity_id"): object, vol.Optional("said"): str,
                 vol.Required("temperature"): vol.Coerce(float),
                 vol.Optional("mode", default="bake"): vol.In([
                     "bake",
@@ -300,85 +341,85 @@ def _register_services(hass: HomeAssistant) -> None:
                 vol.Optional("cavity", default="upper"): vol.In(["upper", "lower"]),
             }
         ),
-        supports_response=SupportsResponse.ONLY,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "stop_oven_cavity",
         stop_oven_cavity,
         schema=vol.Schema(
-            {vol.Required("said"): str, vol.Optional("cavity", default="upper"): vol.In(["upper", "lower"])}
+            {vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Optional("cavity", default="upper"): vol.In(["upper", "lower"])}
         ),
-        supports_response=SupportsResponse.ONLY,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "stop_microwave",
         stop_microwave,
-        schema=vol.Schema({vol.Required("said"): str}),
-        supports_response=SupportsResponse.ONLY,
+        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "set_quiet_mode",
         set_quiet_mode,
-        schema=vol.Schema({vol.Required("said"): str, vol.Required("on"): bool}),
-        supports_response=SupportsResponse.ONLY,
+        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Required("on"): bool}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "set_remote_enable",
         set_remote_enable,
-        schema=vol.Schema({vol.Required("said"): str, vol.Required("on"): bool}),
-        supports_response=SupportsResponse.ONLY,
+        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Required("on"): bool}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "set_kitchen_timer",
         set_kitchen_timer,
         schema=vol.Schema({
-            vol.Required("said"): str,
+            vol.Optional("entity_id"): object, vol.Optional("said"): str,
             vol.Required("seconds"): vol.Coerce(int),
             vol.Optional("timer", default=1): vol.Coerce(int),
         }),
-        supports_response=SupportsResponse.ONLY,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "stop_kitchen_timer",
         stop_kitchen_timer,
         schema=vol.Schema({
-            vol.Required("said"): str,
+            vol.Optional("entity_id"): object, vol.Optional("said"): str,
             vol.Optional("timer", default=1): vol.Coerce(int),
         }),
-        supports_response=SupportsResponse.ONLY,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "check_firmware_update",
         check_firmware_update,
-        schema=vol.Schema({vol.Required("said"): str}),
-        supports_response=SupportsResponse.ONLY,
+        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "sync_time",
         sync_time,
-        schema=vol.Schema({vol.Required("said"): str, vol.Optional("timezone"): str}),
-        supports_response=SupportsResponse.ONLY,
+        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Optional("timezone"): str}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "set_time_auto_update",
         set_time_auto_update,
-        schema=vol.Schema({vol.Required("said"): str, vol.Required("enabled"): bool, vol.Optional("timezone"): str}),
-        supports_response=SupportsResponse.ONLY,
+        schema=vol.Schema({vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Required("enabled"): bool, vol.Optional("timezone"): str}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(DOMAIN, "refresh", refresh)
     hass.services.async_register(
         DOMAIN,
         "appliance_function",
         appliance_function,
-        schema=vol.Schema({vol.Required("function"): vol.In(list(APPLIANCE_FUNCTIONS)), vol.Optional("said"): str, vol.Optional("body"): object, vol.Optional("path_values"): object}),
-        supports_response=SupportsResponse.ONLY,
+        schema=vol.Schema({vol.Required("function"): vol.In(list(APPLIANCE_FUNCTIONS)), vol.Optional("entity_id"): object, vol.Optional("said"): str, vol.Optional("body"): object, vol.Optional("path_values"): object}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
