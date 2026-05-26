@@ -126,42 +126,6 @@
       "check_firmware_update": {
         "name": "Check firmware update"
       },
-      "upper_frozen_bake_pizza": {
-        "name": "Start upper Frozen Bake pizza"
-      },
-      "upper_frozen_bake_pie": {
-        "name": "Start upper Frozen Bake pie"
-      },
-      "upper_frozen_bake_meals": {
-        "name": "Start upper Frozen Bake meals"
-      },
-      "upper_frozen_bake_fries": {
-        "name": "Start upper Frozen Bake fries"
-      },
-      "upper_frozen_bake_nuggets": {
-        "name": "Start upper Frozen Bake nuggets"
-      },
-      "upper_frozen_bake_lasagna": {
-        "name": "Start upper Frozen Bake lasagna"
-      },
-      "lower_frozen_bake_pizza": {
-        "name": "Start lower Frozen Bake pizza"
-      },
-      "lower_frozen_bake_pie": {
-        "name": "Start lower Frozen Bake pie"
-      },
-      "lower_frozen_bake_meals": {
-        "name": "Start lower Frozen Bake meals"
-      },
-      "lower_frozen_bake_fries": {
-        "name": "Start lower Frozen Bake fries"
-      },
-      "lower_frozen_bake_nuggets": {
-        "name": "Start lower Frozen Bake nuggets"
-      },
-      "lower_frozen_bake_lasagna": {
-        "name": "Start lower Frozen Bake lasagna"
-      },
       "start_upper_oven": {
         "name": "Start Upper Oven"
       },
