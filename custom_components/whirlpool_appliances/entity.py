@@ -479,6 +479,57 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
             self._unavailable_logged = False
         return available
 
+    def _remote_control_is_off(self) -> bool:
+        """Return true when the latest status says oven remote control is disabled.
+
+        attr_value() accepts exactly one Whirlpool attribute name, so try each
+        possible status key one at a time. This avoids the tuple/list key crash.
+        """
+        candidates = (
+            "XCat_RemoteSetRemoteControlEnable",
+            "XCat_RemoteControlEnable",
+            "XCat_RemoteEnable",
+            "RemoteSetRemoteControlEnable",
+            "RemoteControlEnable",
+            "remoteControlEnable",
+            "remoteEnable",
+            "remoteEnabled",
+        )
+        values: dict[str, Any] = {}
+        for key in candidates:
+            raw = attr_value(self.flat_status, key)
+            if raw is not None:
+                values[key] = raw
+
+        _LOGGER.debug(
+            "Whirlpool remote-control candidate values: entity=%s said=%s values=%s",
+            self.entity_id,
+            self.said,
+            summarize(values),
+        )
+
+        return any(
+            str(value).strip().lower() in {"0", "false", "off", "disabled"}
+            for value in values.values()
+        )
+
+    def _raise_command_failed(self, result: Any) -> None:
+        if self._remote_control_is_off():
+            _LOGGER.warning(
+                "Whirlpool command rejected because oven remote control appears off: entity=%s said=%s result=%s",
+                self.entity_id,
+                self.said,
+                summarize(result),
+            )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="remote_control_off",
+            )
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="request_failed",
+        )
+
     def _check_service_request(self, result: Any) -> None:
         """Raise a Home Assistant error when a Whirlpool control request failed."""
         if result is False:
@@ -488,10 +539,7 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
                 self.said,
                 summarize(self.flat_status),
             )
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="request_failed",
-            )
+            self._raise_command_failed(result)
         if isinstance(result, Mapping):
             status = str(result.get("status", "")).strip().lower()
             message = str(result.get("message", "")).strip().lower()
@@ -503,10 +551,7 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
                     summarize(result),
                     summarize(self.flat_status),
                 )
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="request_failed",
-                )
+                self._raise_command_failed(result)
 
     def _manufacturer(self, appliance: Mapping[str, Any]) -> str:
         model = str(first_value(appliance, ("MODEL_NO", "modelNumber", "model", "model_number")) or "")
