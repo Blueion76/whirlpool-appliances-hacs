@@ -32,6 +32,7 @@ send_appliance_command:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -62,6 +63,7 @@ set_cavity_light:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -134,6 +136,7 @@ publish_thing_command:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -161,6 +164,7 @@ set_attributes:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -182,6 +186,7 @@ set_oven_cook:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -224,6 +229,7 @@ stop_oven_cavity:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -249,6 +255,7 @@ stop_microwave:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -267,6 +274,7 @@ sync_time:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -289,6 +297,7 @@ set_time_auto_update:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -317,6 +326,7 @@ set_kitchen_timer:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -351,6 +361,7 @@ stop_kitchen_timer:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -376,6 +387,7 @@ check_firmware_update:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -393,6 +405,7 @@ set_quiet_mode:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
@@ -416,6 +429,7 @@ set_remote_enable:
       required: false
       selector:
         entity:
+          integration: whirlpool_appliances
     said:
       name: SAID
       description: Optional manual SAID override. Not needed if appliance entity is selected.
