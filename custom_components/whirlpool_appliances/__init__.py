@@ -210,6 +210,22 @@ def _register_services(hass: HomeAssistant) -> None:
             call.data["temperature"],
             call.data.get("mode", "bake"),
             call.data.get("cavity", "upper"),
+            cook_time_seconds=call.data.get("cook_time_seconds"),
+            delay_time_seconds=call.data.get("delay_time_seconds"),
+            complete_action=call.data.get("complete_action", "turn_off"),
+        )
+        await _first_coordinator(hass).async_request_refresh()
+        return _service_result(result)
+
+    async def set_oven_frozen_bake(call: ServiceCall) -> dict[str, Any]:
+        client = _first_client(hass)
+        result = await client.set_oven_frozen_bake(
+            _service_said(hass, call),
+            call.data["food"],
+            call.data["temperature"],
+            call.data["cook_time_seconds"],
+            call.data.get("cavity", "upper"),
+            complete_action=call.data.get("complete_action", "turn_off"),
         )
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
@@ -350,6 +366,25 @@ def _register_services(hass: HomeAssistant) -> None:
                     "air_fry",
                 ]),
                 vol.Optional("cavity", default="upper"): vol.In(["upper", "lower"]),
+                vol.Optional("cook_time_seconds"): vol.Coerce(int),
+                vol.Optional("delay_time_seconds"): vol.Coerce(int),
+                vol.Optional("complete_action", default="turn_off"): vol.In(["turn_off", "keep_warm", "stay_on"]),
+            }
+        ),
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "set_oven_frozen_bake",
+        set_oven_frozen_bake,
+        schema=vol.Schema(
+            {
+                vol.Optional("appliance_device"): str, vol.Optional("said"): str,
+                vol.Required("food"): vol.In(["pizza", "pie", "meals", "fries", "nuggets", "lasagna"]),
+                vol.Required("temperature"): vol.Coerce(float),
+                vol.Required("cook_time_seconds"): vol.Coerce(int),
+                vol.Optional("cavity", default="upper"): vol.In(["upper", "lower"]),
+                vol.Optional("complete_action", default="turn_off"): vol.In(["turn_off", "keep_warm", "stay_on"]),
             }
         ),
         supports_response=SupportsResponse.OPTIONAL,
