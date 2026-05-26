@@ -496,7 +496,10 @@ class WhirlpoolCloudClient:
             raise WhirlpoolApiError("Missing DDM key")
         if not force and key in self._ddm_capability_cache:
             return self._ddm_capability_cache[key]
-        data = await self.request("GET", f"/api/v1/contents/all/{key}")
+        # The contents/DDM endpoint is served from Whirlpool's content layer.
+        # It rejects OAuth Bearer tokens as an invalid AWS-style Authorization
+        # header, so do not send Authorization here.
+        data = await self.request("GET", f"/api/v1/contents/all/{key}", auth=False)
         self._ddm_capability_cache[key] = data
         return data
 
