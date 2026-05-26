@@ -150,11 +150,13 @@ def _remote_enable_is_off_for_said(hass: HomeAssistant, said: str | None) -> boo
             flat = flatten((coordinator.data or {}).get("status", {}).get(str(said), {}))
             raw = attr_value(
                 flat,
-                "XCat_RemoteSetRemoteControlEnable",
-                "XCat_RemoteControlEnable",
-                "remoteControlEnable",
-                "remoteEnable",
-                "remoteEnabled",
+                (
+                    "XCat_RemoteSetRemoteControlEnable",
+                    "XCat_RemoteControlEnable",
+                    "remoteControlEnable",
+                    "remoteEnable",
+                    "remoteEnabled",
+                ),
             )
             return str(raw).strip().lower() in {"0", "false", "off", "disabled"}
     return False
