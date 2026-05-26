@@ -216,7 +216,8 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if not force and key in self._ddm_capabilities:
                 continue
             try:
-                payload = await self.client.get_ddm_capabilities(key, force=force)
+                first_said = next((str(s) for s in metadata.get("appliance_saids", []) if s), None)
+                payload = await self.client.get_ddm_capabilities(key, said=first_said, force=force)
             except WhirlpoolApiError as err:
                 self._ddm_errors[key] = str(err)
                 _LOGGER.debug("DDM capability fetch failed for %s: %s", key, err)
