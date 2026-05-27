@@ -20,7 +20,6 @@ from .api import (
 )
 from .const import (
     CONF_BRAND,
-    CONF_ENABLE_CONTROL_ENTITIES,
     CONF_EXPOSE_RAW_SENSORS,
     CONF_SCAN_INTERVAL,
     DEFAULT_BRAND,
@@ -138,7 +137,6 @@ class WhirlpoolApkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
                 ): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
                 vol.Optional(CONF_EXPOSE_RAW_SENSORS, default=True): bool,
-                vol.Optional(CONF_ENABLE_CONTROL_ENTITIES, default=False): bool,
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
@@ -171,15 +169,6 @@ class WhirlpoolApkOptionsFlow(config_entries.OptionsFlow):
                         default=self.config_entry.options.get(
                             CONF_EXPOSE_RAW_SENSORS,
                             self.config_entry.data.get(CONF_EXPOSE_RAW_SENSORS, True),
-                        ),
-                    ): bool,
-                    vol.Optional(
-                        CONF_ENABLE_CONTROL_ENTITIES,
-                        default=self.config_entry.options.get(
-                            CONF_ENABLE_CONTROL_ENTITIES,
-                            self.config_entry.data.get(
-                                CONF_ENABLE_CONTROL_ENTITIES, False
-                            ),
                         ),
                     ): bool,
                 }

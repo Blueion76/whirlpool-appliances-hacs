@@ -15,7 +15,6 @@
       "user": {
         "data": {
           "brand": "Brand",
-          "enable_control_entities": "Enable control entities",
           "expose_raw_sensors": "Expose raw diagnostic sensors",
           "password": "Password",
           "region": "Region",
@@ -39,7 +38,6 @@
     "step": {
       "init": {
         "data": {
-          "enable_control_entities": "Enable control entities",
           "expose_raw_sensors": "Expose raw diagnostic sensors",
           "scan_interval": "Scan interval seconds"
         },
