@@ -905,7 +905,7 @@
     },
     "feature": {
       "name": "Feature",
-      "description": "Grouped Whirlpool/JennAir/KitchenAid feature service for DDM content, accessories, recipes, drinks, energy, sharing, notifications, TS OTA, documents, diagnostics, and video capability discovery.",
+      "description": "Grouped feature service for DDM content, accessories, notifications, TS OTA, documents, diagnostics, and video capability discovery.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -951,61 +951,9 @@
           "name": "Notes",
           "description": "Favorite notes."
         },
-        "query": {
-          "name": "Query",
-          "description": "Search query."
-        },
-        "upc": {
-          "name": "UPC",
-          "description": "Recipe UPC barcode."
-        },
-        "category": {
-          "name": "Category",
-          "description": "Scan2Cook category."
-        },
-        "recipe_id": {
-          "name": "Recipe ID",
-          "description": "Recipe identifier."
-        },
-        "app": {
-          "name": "RMS app",
-          "description": "RMS app name."
-        },
-        "filter_name": {
-          "name": "Filter name",
-          "description": "RMS view/filter name."
-        },
-        "drink_id": {
-          "name": "Drink ID",
-          "description": "RMS drink identifier."
-        },
-        "userdata_id": {
-          "name": "User data ID",
-          "description": "RMS user data identifier."
-        },
-        "zip_code": {
-          "name": "ZIP code",
-          "description": "ZIP code for energy provider lookup."
-        },
-        "location_id": {
-          "name": "Location ID",
-          "description": "Whirlpool location identifier."
-        },
-        "account_id": {
-          "name": "Account ID",
-          "description": "Whirlpool account identifier."
-        },
         "device_id": {
           "name": "Device ID",
           "description": "Notification or mobile device identifier."
-        },
-        "value": {
-          "name": "Value",
-          "description": "Endpoint value to send."
-        },
-        "share_request_id": {
-          "name": "Share request ID",
-          "description": "Shared-account invite/request identifier."
         }
       }
     }
