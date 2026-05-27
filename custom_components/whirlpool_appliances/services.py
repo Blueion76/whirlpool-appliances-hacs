@@ -12,7 +12,6 @@ from homeassistant.helpers import device_registry as dr
 from .api import WhirlpoolApiError, WhirlpoolCloudClient
 from .api_spec import APPLIANCE_FUNCTIONS
 from .const import DATA_CLIENT, DATA_COORDINATOR, DOMAIN
-from .helpers.logging import summarize
 
 
 def register_services(hass: HomeAssistant) -> None:
@@ -139,6 +138,16 @@ def register_services(hass: HomeAssistant) -> None:
         coordinator.async_set_updated_data(data)
         return _response({"ddm_keys": list(coordinator._ddm_capabilities), "errors": coordinator._ddm_errors})
 
+    async def update_appliances(call: ServiceCall) -> dict[str, Any]:
+        client = _first_client(hass)
+        result = await client.request("POST", "/api/v2/updateAppliances", json=call.data.get("body"))
+        await _first_coordinator(hass).async_request_refresh()
+        return _response(result)
+
+    async def get_ddm_content(call: ServiceCall) -> dict[str, Any]:
+        ddm_key = str(call.data["ddm_key"])
+        return _response(await _first_client(hass).request("GET", f"/api/v1/contents/all/{ddm_key}"))
+
     async def appliance_function(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.call_function(call.data["function"], said=_service_said(hass, call), body=call.data.get("body"), **dict(call.data.get("path_values") or {}))
@@ -178,6 +187,35 @@ def register_services(hass: HomeAssistant) -> None:
         user_id = await _user_id(client)
         return _response(await client.request("DELETE", f"/api/v1/users/{user_id}/messages/{call.data['message_id']}"))
 
+    async def get_accessories(call: ServiceCall) -> dict[str, Any]:
+        return _response(await _first_client(hass).request("GET", "/api/v1/accessory"))
+
+    async def get_accessory_status(call: ServiceCall) -> dict[str, Any]:
+        serial_number = str(call.data["serial_number"])
+        return _response(await _first_client(hass).request("GET", f"/api/v1/accessory/{serial_number}"))
+
+    async def get_accessory_cycle_history(call: ServiceCall) -> dict[str, Any]:
+        return _response(await _first_client(hass).request("GET", "/api/v1/accessory/cycle-history", params=dict(call.data.get("params") or {}) or None))
+
+    async def get_accessory_ota_status(call: ServiceCall) -> dict[str, Any]:
+        return _response(await _first_client(hass).request("GET", "/api/v1/accessory/ota"))
+
+    async def live_collect(call: ServiceCall) -> dict[str, Any]:
+        return _response(await _first_client(hass).request("GET", f"/api/v1/live/collect/{_service_said(hass, call)}"))
+
+    async def get_ac_filter_status(call: ServiceCall) -> dict[str, Any]:
+        return _response(await _first_client(hass).request("GET", f"/api/v1/ac/getACFilterStatus/{_service_said(hass, call)}"))
+
+    async def reset_ac_filter(call: ServiceCall) -> dict[str, Any]:
+        client = _first_client(hass)
+        said = _service_said(hass, call)
+        body = dict(call.data.get("body") or {})
+        body.setdefault("said", said)
+        body.setdefault("saId", said)
+        result = await client.request("POST", "/api/v1/ac/resetACFilter", json=body)
+        await _first_coordinator(hass).async_request_refresh()
+        return _response(result)
+
     _register(hass, "call_api", call_api, vol.Schema({vol.Required("path"): str, vol.Optional("method", default="GET"): str, vol.Optional("body"): object, vol.Optional("params"): object, vol.Optional("auth", default=True): bool}))
     _register(hass, "send_appliance_command", send_command, _said_schema({vol.Optional("command", default="setAttributes"): str, vol.Optional("attributes"): object, vol.Optional("raw"): object}))
     _register(hass, "set_cavity_light", set_cavity_light, _said_schema({vol.Required("enabled"): bool, vol.Optional("on"): bool, vol.Optional("cavity"): str}))
@@ -197,6 +235,8 @@ def register_services(hass: HomeAssistant) -> None:
     _register(hass, "set_timezone", set_timezone, _said_schema({vol.Required("timezone"): str}))
     hass.services.async_register(DOMAIN, "refresh", refresh)
     _register(hass, "refresh_ddm_capabilities", refresh_ddm_capabilities, None)
+    _register(hass, "update_appliances", update_appliances, vol.Schema({vol.Optional("body"): object}))
+    _register(hass, "get_ddm_content", get_ddm_content, vol.Schema({vol.Required("ddm_key"): str}))
     _register(hass, "appliance_function", appliance_function, _said_schema({vol.Required("function"): vol.In(list(APPLIANCE_FUNCTIONS)), vol.Optional("body"): object, vol.Optional("path_values"): object}))
     _register(hass, "get_cycle_history", get_cycle_history, _history_schema())
     _register(hass, "get_fault_history", get_fault_history, _history_schema())
@@ -205,12 +245,19 @@ def register_services(hass: HomeAssistant) -> None:
     _register(hass, "get_messages", get_messages, vol.Schema({}))
     _register(hass, "get_message", get_message, vol.Schema({vol.Required("message_id"): str}))
     _register(hass, "dismiss_message", dismiss_message, vol.Schema({vol.Required("message_id"): str}))
+    _register(hass, "get_accessories", get_accessories, vol.Schema({}))
+    _register(hass, "get_accessory_status", get_accessory_status, vol.Schema({vol.Required("serial_number"): str}))
+    _register(hass, "get_accessory_cycle_history", get_accessory_cycle_history, vol.Schema({vol.Optional("params"): dict}))
+    _register(hass, "get_accessory_ota_status", get_accessory_ota_status, vol.Schema({}))
+    _register(hass, "live_collect", live_collect, _said_schema())
+    _register(hass, "get_ac_filter_status", get_ac_filter_status, _said_schema())
+    _register(hass, "reset_ac_filter", reset_ac_filter, _said_schema({vol.Optional("body"): dict}))
 
 
 def unregister_services(hass: HomeAssistant) -> None:
     """Unregister Whirlpool Appliances services."""
     for service in (
-        "call_api", "send_appliance_command", "set_cavity_light", "publish_thing_command", "set_attributes", "set_oven_cook", "set_oven_frozen_bake", "stop_oven_cavity", "stop_microwave", "set_quiet_mode", "set_remote_enable", "set_kitchen_timer", "stop_kitchen_timer", "check_firmware_update", "sync_time", "set_time_auto_update", "set_timezone", "refresh", "refresh_ddm_capabilities", "appliance_function", "get_cycle_history", "get_fault_history", "get_favorites", "delete_favorite", "get_messages", "get_message", "dismiss_message",
+        "call_api", "send_appliance_command", "set_cavity_light", "publish_thing_command", "set_attributes", "set_oven_cook", "set_oven_frozen_bake", "stop_oven_cavity", "stop_microwave", "set_quiet_mode", "set_remote_enable", "set_kitchen_timer", "stop_kitchen_timer", "check_firmware_update", "sync_time", "set_time_auto_update", "set_timezone", "refresh", "refresh_ddm_capabilities", "update_appliances", "get_ddm_content", "appliance_function", "get_cycle_history", "get_fault_history", "get_favorites", "delete_favorite", "get_messages", "get_message", "dismiss_message", "get_accessories", "get_accessory_status", "get_accessory_cycle_history", "get_accessory_ota_status", "live_collect", "get_ac_filter_status", "reset_ac_filter",
     ):
         if hass.services.has_service(DOMAIN, service):
             hass.services.async_remove(DOMAIN, service)
