@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import WhirlpoolApiError, WhirlpoolCloudClient, appliance_ddm_key, appliance_said
 from .api_mqtt import WhirlpoolThingShieldManager
+from .api_stomp import WhirlpoolLegacyStompManager
 from .helpers.capabilities import parse_ddm_capabilities
 from .helpers.logging import summarize, summarize_keys
 
@@ -17,138 +18,85 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _has_substantive_state(state: Any) -> bool:
-    """True when a status payload contains more than presence/pending metadata."""
+    """Return true if a push payload contains meaningful state data."""
     if not isinstance(state, Mapping):
-        return bool(state)
-    metadata_keys = {
-        "online",
-        "source",
-        "pending",
-        "detail",
-        "mqttTopic",
-        "mqttRaw",
-        "topicModel",
-        "lastResponse",
-        "lastRequestId",
-        "error",
-    }
-    return any(key not in metadata_keys for key in state)
+        return False
+    ignored = {"source", "stompHeaders", "stompReceivedAt", "pushEnvelope"}
+    return any(key not in ignored and value not in (None, "", {}, []) for key, value in state.items())
 
 
-def _find_ddm_key_from_status(status: Any) -> str | None:
-    """Best-effort DDM key lookup from a raw status/appliance snapshot."""
-    if not isinstance(status, Mapping):
-        return None
-
-    candidates = (
-        "ddmKey",
-        "DDM_KEY",
-        "dataModelKey",
-        "DATA_MODEL_KEY",
-        "data_model_key",
-        "dataModel",
-        "DATA_MODEL",
-    )
-
-    def walk(value: Any) -> str | None:
-        if isinstance(value, Mapping):
-            for key in candidates:
-                found = value.get(key)
-                if found not in (None, "", "0", 0):
-                    return str(found)
-            # Legacy status sometimes nests metadata under an Appliance object.
-            for nested in value.values():
-                found = walk(nested)
-                if found:
-                    return found
-        elif isinstance(value, list):
-            for item in value:
-                found = walk(item)
-                if found:
-                    return found
-        return None
-
-    return walk(status)
-
-
-def _appliance_category(appliance: Mapping[str, Any], status: Any | None = None) -> str | None:
-    """Return the most useful category/type string for diagnostics."""
-    keys = (
-        "CATEGORY_NAME",
-        "categoryName",
-        "category",
-        "Category",
-        "applianceCategory",
-        "applianceType",
-        "type",
-    )
-    for key in keys:
+def _appliance_category(appliance: Mapping[str, Any], status: Any = None) -> str | None:
+    for key in ("category", "applianceCategory", "SAID_TYPE", "applianceType", "type"):
         value = appliance.get(key)
-        if value not in (None, "", "0", 0):
+        if value:
             return str(value)
-
     if isinstance(status, Mapping):
-        for key in keys:
+        for key in ("category", "applianceCategory", "SAID_TYPE", "applianceType", "type"):
             value = status.get(key)
-            if value not in (None, "", "0", 0):
+            if value:
                 return str(value)
     return None
 
 
-def _appliance_metadata(appliance: Mapping[str, Any], status: Any | None = None) -> dict[str, Any]:
-    """Return normalized appliance metadata used by device info and diagnostics."""
-    status_map = status if isinstance(status, Mapping) else {}
-    return {
-        "said": appliance_said(appliance),
-        "ddm_key": appliance_ddm_key(appliance) or _find_ddm_key_from_status(status),
-        "category": _appliance_category(appliance, status),
-        "model": (
-            appliance.get("MODEL_NO")
-            or appliance.get("modelNumber")
-            or appliance.get("model_number")
-            or appliance.get("model")
-            or status_map.get("ModelNumber")
-        ),
-        "serial": (
-            appliance.get("SERIAL")
-            or appliance.get("serialNumber")
-            or appliance.get("serial")
-            or status_map.get("SerialNumber")
-        ),
-        "ccuri": (
-            appliance.get("ccuri")
-            or appliance.get("CC_URI")
-            or status_map.get("ccuri")
-            or status_map.get("CC_URI")
-        ),
-        "data_model_key": (
-            appliance.get("DATA_MODEL_KEY")
-            or appliance.get("dataModelKey")
-            or status_map.get("DATA_MODEL_KEY")
-        ),
-        "source": appliance.get("source"),
-        "thing_shield": bool(appliance.get("thingShield")),
-    }
+def _find_ddm_key_from_status(status: Any) -> str | None:
+    """Best-effort DDM key lookup from status payloads."""
+    if not isinstance(status, Mapping):
+        return None
+    for key in (
+        "dataModelKey",
+        "DATA_MODEL_KEY",
+        "ddmKey",
+        "deviceDataModelKey",
+        "DeviceDataModelKey",
+    ):
+        value = status.get(key)
+        if value:
+            return str(value)
+    attributes = status.get("attributes")
+    if isinstance(attributes, Mapping):
+        for key in (
+            "dataModelKey",
+            "DATA_MODEL_KEY",
+            "ddmKey",
+            "deviceDataModelKey",
+            "DeviceDataModelKey",
+        ):
+            value = attributes.get(key)
+            if isinstance(value, Mapping):
+                value = value.get("value")
+            if value:
+                return str(value)
+    return None
 
+
+def _merge_status(existing: Any, update: Any) -> Any:
+    """Merge an incremental status payload into an existing status payload."""
+    if isinstance(existing, Mapping) and isinstance(update, Mapping):
+        merged = dict(existing)
+        for key, value in update.items():
+            if isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
+                merged[key] = _merge_status(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+    return update if update is not None else existing
 
 
 class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Keep Whirlpool appliance list and status data fresh.
+    """Whirlpool Appliances data coordinator."""
 
-    Legacy SAID appliances are refreshed through REST polling. ThingShield TS_SAID
-    appliances are subscribed through AWS IoT MQTT and merged into the same status map.
-    """
-
-    def __init__(self, hass, client: WhirlpoolCloudClient, update_interval: int) -> None:
+    def __init__(self, hass, client: WhirlpoolCloudClient, scan_interval: int) -> None:
         super().__init__(
             hass,
             _LOGGER,
-            name="Whirlpool Appliances appliances",
-            update_interval=timedelta(seconds=update_interval),
+            name="Whirlpool Appliances",
+            update_interval=timedelta(seconds=scan_interval),
         )
         self.client = client
         self.thing_manager = WhirlpoolThingShieldManager(client, self._handle_thing_state)
+        self.legacy_push_manager = WhirlpoolLegacyStompManager(client, self._handle_legacy_push_state)
         self._thing_started = False
+        self._legacy_push_started = False
         self._latest_appliances: list[dict[str, Any]] = []
         self._latest_statuses: dict[str, Any] = {}
         self._ddm_capabilities: dict[str, Any] = {}
@@ -156,22 +104,39 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._appliance_metadata: dict[str, dict[str, Any]] = {}
 
     async def async_start_push(self) -> None:
-        """Start ThingShield MQTT subscriptions for discovered TS_SAID devices."""
+        """Start realtime subscriptions for discovered appliances."""
         saids = self._thing_saids(self._latest_appliances)
-        if not saids:
-            return
-        try:
-            _LOGGER.debug("Starting Whirlpool ThingShield MQTT for %d appliance(s): %s", len(saids), sorted(saids))
-            await self.thing_manager.ensure_started(saids, self._latest_appliances)
-            self._thing_started = True
-            self._merge_thing_metadata()
-            _LOGGER.debug("Whirlpool ThingShield MQTT startup complete")
-        except WhirlpoolApiError as err:
-            _LOGGER.warning("Whirlpool ThingShield MQTT startup failed: %s", err)
+        if saids:
+            try:
+                _LOGGER.debug(
+                    "Starting Whirlpool ThingShield MQTT for %d appliance(s): %s",
+                    len(saids),
+                    sorted(saids),
+                )
+                await self.thing_manager.ensure_started(saids, self._latest_appliances)
+                self._thing_started = True
+                self._merge_thing_metadata()
+                _LOGGER.debug("Whirlpool ThingShield MQTT startup complete")
+            except WhirlpoolApiError as err:
+                _LOGGER.warning("Whirlpool ThingShield MQTT startup failed: %s", err)
+
+        legacy_saids = self._legacy_saids(self._latest_appliances)
+        if legacy_saids:
+            try:
+                _LOGGER.debug(
+                    "Starting Whirlpool legacy STOMP push for %d appliance(s): %s",
+                    len(legacy_saids),
+                    sorted(legacy_saids),
+                )
+                await self.legacy_push_manager.ensure_started(self._latest_appliances)
+                self._legacy_push_started = True
+            except WhirlpoolApiError as err:
+                _LOGGER.warning("Whirlpool legacy STOMP push startup failed: %s", err)
 
     async def async_shutdown(self) -> None:
         """Disconnect realtime connections on unload."""
         await self.thing_manager.shutdown()
+        await self.legacy_push_manager.shutdown()
 
     async def async_publish_thing_command(
         self, said: str, command: str, payload: Mapping[str, Any] | None = None
@@ -179,9 +144,19 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Publish a command to a ThingShield appliance."""
         if said not in self.thing_manager.runtimes:
             await self.async_start_push()
-        _LOGGER.debug("Publishing Whirlpool ThingShield command: said=%s command=%s payload=%s", said, command, summarize(payload))
+        _LOGGER.debug(
+            "Publishing Whirlpool ThingShield command: said=%s command=%s payload=%s",
+            said,
+            command,
+            summarize(payload),
+        )
         result = await self.thing_manager.publish_command(said, command, payload)
-        _LOGGER.debug("Published Whirlpool ThingShield command result: said=%s command=%s result=%s", said, command, summarize(result))
+        _LOGGER.debug(
+            "Published Whirlpool ThingShield command result: said=%s command=%s result=%s",
+            said,
+            command,
+            summarize(result),
+        )
         return result
 
     async def async_fetch_ddm_capabilities(
@@ -195,7 +170,11 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         appliances = appliances if appliances is not None else self._latest_appliances
         statuses = statuses if statuses is not None else self._latest_statuses
 
-        _LOGGER.debug("Refreshing Whirlpool DDM capabilities: appliance_count=%d force=%s", len(appliances), force)
+        _LOGGER.debug(
+            "Refreshing Whirlpool DDM capabilities: appliance_count=%d force=%s",
+            len(appliances),
+            force,
+        )
         ddm_keys: dict[str, dict[str, Any]] = {}
         for appliance in appliances:
             said = appliance_said(appliance)
@@ -221,11 +200,20 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         for key, metadata in ddm_keys.items():
             if not force and key in self._ddm_capabilities:
-                _LOGGER.debug("Using cached Whirlpool DDM capabilities: key=%s metadata=%s", key, summarize(metadata))
+                _LOGGER.debug(
+                    "Using cached Whirlpool DDM capabilities: key=%s metadata=%s",
+                    key,
+                    summarize(metadata),
+                )
                 continue
             try:
                 first_said = next((str(s) for s in metadata.get("appliance_saids", []) if s), None)
-                _LOGGER.debug("Fetching Whirlpool DDM capabilities: key=%s said=%s metadata=%s", key, first_said, summarize(metadata))
+                _LOGGER.debug(
+                    "Fetching Whirlpool DDM capabilities: key=%s said=%s metadata=%s",
+                    key,
+                    first_said,
+                    summarize(metadata),
+                )
                 payload = await self.client.get_ddm_capabilities(key, said=first_said, force=force)
             except WhirlpoolApiError as err:
                 self._ddm_errors[key] = str(err)
@@ -249,189 +237,131 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return self._ddm_capabilities
 
-    def _build_appliance_metadata(
-        self,
-        appliances: list[dict[str, Any]],
-        statuses: Mapping[str, Any],
-    ) -> dict[str, dict[str, Any]]:
-        """Build normalized metadata for every discovered appliance."""
-        metadata: dict[str, dict[str, Any]] = {}
-        for appliance in appliances:
-            said = appliance_said(appliance)
-            if not said:
-                continue
-            metadata[said] = _appliance_metadata(appliance, statuses.get(said))
-        self._appliance_metadata = metadata
-        return metadata
-
     async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch account appliances and statuses."""
         try:
-            _LOGGER.debug("Starting Whirlpool coordinator refresh")
-            if not self.client.authenticated:
-                _LOGGER.debug("Whirlpool client is not authenticated; logging in before refresh")
-                await self.client.login()
-            appliances = await self.client.list_appliances()
-            _LOGGER.debug("Whirlpool appliance list refreshed: count=%d payload=%s", len(appliances), summarize(appliances))
-            self._latest_appliances = appliances
+            appliances = await self.client.get_appliances()
+            self._latest_appliances = list(appliances)
             self._merge_thing_metadata()
-            statuses: dict[str, Any] = dict(self._latest_statuses)
+            statuses: dict[str, Any] = {}
 
-            thing_saids = set(self._thing_saids(appliances))
-            if thing_saids:
-                # Keep MQTT credentials/connection healthy and ask for fresh snapshots.
-                if self._thing_started:
-                    try:
-                        await self.thing_manager.ensure_connected()
-                    except WhirlpoolApiError as err:
-                        _LOGGER.debug("ThingShield reconnect failed during refresh: %s", err)
-                else:
-                    await self.async_start_push()
-                statuses.update(self.thing_manager.states)
+            if self._thing_started:
+                await self.thing_manager.ensure_connected(self._thing_saids(appliances))
+            if self._legacy_push_started:
+                await self.legacy_push_manager.ensure_connected()
+
+            for said, push_state in self.legacy_push_manager.states.items():
+                if self.legacy_push_manager.connected and _has_substantive_state(push_state):
+                    statuses[said] = push_state
 
             for appliance in appliances:
                 said = appliance_said(appliance)
                 if not said:
                     continue
-                if said in thing_saids:
-                    mqtt_state = self.thing_manager.states.get(said)
-                    if mqtt_state and _has_substantive_state(mqtt_state):
-                        statuses[said] = mqtt_state
-                        continue
-                    # Some TS_SAID devices still expose a useful REST snapshot.
-                    # Try it as a non-fatal fallback while waiting for MQTT state.
-                    rest_snapshot = await self._try_rest_snapshot(said)
-                    if rest_snapshot is not None:
-                        merged = dict(mqtt_state or {})
-                        merged.update(rest_snapshot if isinstance(rest_snapshot, dict) else {"restSnapshot": rest_snapshot})
-                        merged.setdefault("source", "mqtt+rest")
-                        statuses[said] = merged
-                    else:
-                        statuses.setdefault(
-                            said,
-                            mqtt_state
-                            or {
-                                "source": "mqtt",
-                                "pending": True,
-                                "detail": "MQTT connected; waiting for a state/update or command response payload",
-                            },
-                        )
+                if said in statuses:
                     continue
-                snapshot = await self._try_legacy_snapshot(said)
-                if snapshot is not None:
-                    _LOGGER.debug("Whirlpool legacy snapshot updated: said=%s shape=%s", said, summarize_keys(snapshot))
-                    statuses[said] = snapshot
-                else:
-                    _LOGGER.debug("Whirlpool legacy snapshot unavailable: said=%s", said)
-                    statuses[said] = {"error": "No usable Whirlpool REST status/appliance snapshot returned"}
+                source = str(appliance.get("source") or appliance.get("applianceType") or "").upper()
+                if bool(appliance.get("thingShield")) or source == "TS_SAID":
+                    state = self.thing_manager.states.get(said)
+                    if state:
+                        statuses[said] = state
+                        continue
+                status = await self.client.get_status(said)
+                statuses[said] = status
+
+            for said, existing in self._latest_statuses.items():
+                if said not in statuses and existing is not None:
+                    statuses[said] = existing
+
+            for appliance in appliances:
+                said = appliance_said(appliance)
+                if not said:
+                    continue
+                push_state = self.legacy_push_manager.states.get(said)
+                if self.legacy_push_manager.connected and push_state and _has_substantive_state(push_state):
+                    statuses[said] = _merge_status(statuses.get(said), push_state)
+
             self._latest_statuses = statuses
-            appliance_metadata = self._build_appliance_metadata(appliances, statuses)
             await self.async_fetch_ddm_capabilities(appliances, statuses)
-            _LOGGER.debug(
-                "Completed Whirlpool coordinator refresh: appliances=%d statuses=%d ddm=%d ddm_errors=%d",
-                len(appliances),
-                len(statuses),
-                len(self._ddm_capabilities),
-                len(self._ddm_errors),
-            )
-            return {
+            data = {
                 "appliances": appliances,
                 "statuses": statuses,
-                "appliance_metadata": appliance_metadata,
                 "ddm_capabilities": self._ddm_capabilities,
                 "ddm_errors": self._ddm_errors,
+                "appliance_metadata": self._appliance_metadata,
+                "thing_states": self.thing_manager.states,
+                "legacy_push_states": self.legacy_push_manager.states,
+                "legacy_push_connected": self.legacy_push_manager.connected,
             }
+            _LOGGER.debug(
+                "Whirlpool coordinator updated: appliances=%d statuses=%s ddm_keys=%s legacy_push_connected=%s",
+                len(appliances),
+                sorted(statuses),
+                sorted(self._ddm_capabilities),
+                self.legacy_push_manager.connected,
+            )
+            return data
         except WhirlpoolApiError as err:
-            _LOGGER.warning("Whirlpool coordinator refresh failed: %s", err)
             raise UpdateFailed(str(err)) from err
 
-    async def _try_rest_snapshot(self, said: str) -> Any | None:
-        """Best-effort REST snapshot for TS_SAID devices."""
-        return await self._try_legacy_snapshot(said)
-
-    async def _try_legacy_snapshot(self, said: str) -> Any | None:
-        """Best-effort full REST snapshot for legacy SAID appliances.
-
-        MizterB/whirlpool-sixth-sense fetches legacy appliance data from
-        /api/v1/appliance/{said}; Minerva cooking appliances expose their useful
-        values under the returned attributes map, not only under /status/{said}.
-        Merge both endpoints when both work, but make /api/v1/appliance/{said}
-        the authoritative source for attributes.
-        """
-        merged: dict[str, Any] = {}
-        got_any = False
-        for getter in (self.client.get_status, self.client.get_appliance):
-            try:
-                data = await getter(said)
-            except WhirlpoolApiError as err:
-                _LOGGER.debug("Optional REST snapshot failed: said=%s getter=%s error=%s", said, getter.__name__, err)
-                continue
-            _LOGGER.debug("Optional REST snapshot succeeded: said=%s getter=%s shape=%s", said, getter.__name__, summarize_keys(data))
-            if isinstance(data, Mapping):
-                merged.update(data)
-            else:
-                merged.setdefault("payload", data)
-            got_any = True
-        _LOGGER.debug("Merged Whirlpool REST snapshot: said=%s got_any=%s shape=%s", said, got_any, summarize_keys(merged))
-        return merged if got_any else None
-
-    def _handle_thing_state(self, said: str, state: dict[str, Any]) -> None:
-        """Merge a MQTT state update into the coordinator on the HA event loop."""
-        _LOGGER.debug("Received Whirlpool ThingShield state update: said=%s shape=%s payload=%s", said, summarize_keys(state), summarize(state))
-        def apply() -> None:
-            statuses = dict(self._latest_statuses)
-            statuses[said] = state
-            self._latest_statuses = statuses
-            data = dict(self.data or {})
-            data["statuses"] = statuses
-            data.setdefault("appliances", self._latest_appliances)
-            data.setdefault("appliance_metadata", self._appliance_metadata)
-            data.setdefault("ddm_capabilities", self._ddm_capabilities)
-            data.setdefault("ddm_errors", self._ddm_errors)
-            self.async_set_updated_data(data)
-
-        self.hass.loop.call_soon_threadsafe(apply)
-
     @staticmethod
-    def _thing_saids(appliances: list[dict[str, Any]]) -> list[str]:
-        saids: list[str] = []
+    def _thing_saids(appliances: list[Mapping[str, Any]]) -> set[str]:
+        """Return SAIDs that are ThingShield devices."""
+        saids: set[str] = set()
         for appliance in appliances:
             said = appliance_said(appliance)
             if not said:
                 continue
             source = str(appliance.get("source") or appliance.get("applianceType") or "").upper()
-            thing_flag = bool(appliance.get("thingShield"))
-            if thing_flag or source == "TS_SAID":
-                saids.append(said)
+            if bool(appliance.get("thingShield")) or source == "TS_SAID":
+                saids.add(said)
+        return saids
+
+    @staticmethod
+    def _legacy_saids(appliances: list[Mapping[str, Any]]) -> set[str]:
+        """Return SAIDs that should use legacy STOMP push."""
+        saids: set[str] = set()
+        for appliance in appliances:
+            said = appliance_said(appliance)
+            if not said:
+                continue
+            source = str(appliance.get("source") or appliance.get("applianceType") or "").upper()
+            if bool(appliance.get("thingShield")) or source == "TS_SAID":
+                continue
+            saids.add(said)
         return saids
 
     def _merge_thing_metadata(self) -> None:
-        """Update appliance list entries with discovered AWS IoT metadata."""
-        if not self._latest_appliances:
-            return
-        by_said = {said: runtime for said, runtime in self.thing_manager.runtimes.items()}
-        if not by_said:
-            return
-        updated: list[dict[str, Any]] = []
+        """Copy ThingShield metadata into latest appliance records."""
         for appliance in self._latest_appliances:
             said = appliance_said(appliance)
-            runtime = by_said.get(said or "")
-            if not runtime:
-                updated.append(appliance)
+            if not said:
                 continue
-            info = runtime.info
-            enriched = dict(appliance)
-            enriched["model"] = runtime.model
-            enriched["thingShield"] = True
-            enriched["source"] = "TS_SAID"
-            if info:
-                enriched.update(
-                    {
-                        "name": info.name,
-                        "brand": info.brand,
-                        "category": info.category,
-                        "serialNumber": info.serial or said,
-                        "thingId": info.thing_id,
-                    }
-                )
-            updated.append(enriched)
-        self._latest_appliances = updated
+            metadata = self.thing_manager.metadata.get(said)
+            if metadata:
+                appliance.setdefault("thing_metadata", metadata)
+                self._appliance_metadata[said] = metadata
+
+    def _handle_thing_state(self, said: str, state: dict[str, Any]) -> None:
+        """Handle ThingShield state callback."""
+        self._latest_statuses[said] = state
+        self._merge_thing_metadata()
+        data = dict(self.data or {})
+        statuses = dict(data.get("statuses") or {})
+        statuses[said] = state
+        data["statuses"] = statuses
+        data["thing_states"] = self.thing_manager.states
+        data["appliance_metadata"] = self._appliance_metadata
+        self.async_set_updated_data(data)
+
+    def _handle_legacy_push_state(self, said: str, state: dict[str, Any]) -> None:
+        """Handle legacy STOMP state callback."""
+        merged = _merge_status(self._latest_statuses.get(said), state)
+        self._latest_statuses[said] = merged
+        data = dict(self.data or {})
+        statuses = dict(data.get("statuses") or {})
+        statuses[said] = _merge_status(statuses.get(said), state)
+        data["statuses"] = statuses
+        data["legacy_push_states"] = self.legacy_push_manager.states
+        data["legacy_push_connected"] = self.legacy_push_manager.connected
+        self.async_set_updated_data(data)
