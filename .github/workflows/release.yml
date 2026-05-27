@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   create_release:
-    name: Create GitHub Release from manifest version
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,20 +23,28 @@ jobs:
         id: manifest
         run: |
           python - <<'PY'
-          import json
+          import json, os
           from pathlib import Path
 
           manifest_path = Path("custom_components/whirlpool_appliances/manifest.json")
           manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-          version = manifest.get("version")
-          if not version or not isinstance(version, str):
-            raise SystemExit('manifest.json missing valid "version"')
+
+          version = (manifest.get("version") or "").strip()
+          if not version:
+            raise SystemExit('manifest.json "version" is empty')
 
           tag = f"v{version.lstrip('v')}"
-          with open("$GITHUB_OUTPUT", "a", encoding="utf-8") as f:
+
+          out_path = os.environ["GITHUB_OUTPUT"]
+          with open(out_path, "a", encoding="utf-8") as f:
             f.write(f"version={version}\n")
             f.write(f"tag={tag}\n")
           PY
+
+      - name: Debug resolved version/tag
+        run: |
+          echo "version='${{ steps.manifest.outputs.version }}'"
+          echo "tag='${{ steps.manifest.outputs.tag }}'"
 
       - name: Check whether tag already exists
         id: tag_exists
