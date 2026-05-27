@@ -53,8 +53,11 @@ def _bool_by_keys(*keys: str, invert: bool = False) -> Callable[[Mapping[str, An
     return value
 
 
-def _bool_attr(attr: str) -> Callable[[Mapping[str, Any]], bool | None]:
-    return lambda flat: _bool(attr_value(flat, attr))
+def _bool_attr(attr: str, *, invert: bool = False) -> Callable[[Mapping[str, Any]], bool | None]:
+    def value(flat: Mapping[str, Any]) -> bool | None:
+        val = _bool(attr_value(flat, attr))
+        return None if val is None else (not val if invert else val)
+    return value
 
 
 def _running(flat: Mapping[str, Any]) -> bool | None:
@@ -218,8 +221,8 @@ BINARY_DESCRIPTIONS: tuple[WhirlpoolApkBinarySensorDescription, ...] = (
     WhirlpoolApkBinarySensorDescription(key="ac_filter_problem", translation_key="ac_filter_problem", icon="mdi:air-filter", device_class=BinarySensorDeviceClass.PROBLEM, value_fn=_filter_problem, aircon_only=True),
     WhirlpoolApkBinarySensorDescription(key="upper_door", translation_key="upper_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("OvenUpperCavity_OpStatusDoorOpen"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(key="lower_door", translation_key="lower_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("OvenLowerCavity_OpStatusDoorOpen"), cooking_only=True),
-    WhirlpoolApkBinarySensorDescription(key="upper_door_locked", translation_key="upper_door_locked", icon="mdi:lock", device_class=BinarySensorDeviceClass.LOCK, value_fn=_bool_by_keys("OvenUpperCavity_OpStatusDoorLocked", invert=True), cooking_only=True),
-    WhirlpoolApkBinarySensorDescription(key="lower_door_locked", translation_key="lower_door_locked", icon="mdi:lock", device_class=BinarySensorDeviceClass.LOCK, value_fn=_bool_by_keys("OvenLowerCavity_OpStatusDoorLocked", invert=True), cooking_only=True),
+    WhirlpoolApkBinarySensorDescription(key="upper_door_locked", translation_key="upper_door_locked", icon="mdi:lock", device_class=BinarySensorDeviceClass.LOCK, value_fn=_bool_attr("OvenUpperCavity_OpStatusDoorLocked", invert=True), cooking_only=True),
+    WhirlpoolApkBinarySensorDescription(key="lower_door_locked", translation_key="lower_door_locked", icon="mdi:lock", device_class=BinarySensorDeviceClass.LOCK, value_fn=_bool_attr("OvenLowerCavity_OpStatusDoorLocked", invert=True), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(
         key="control_lock",
         translation_key="control_lock",
