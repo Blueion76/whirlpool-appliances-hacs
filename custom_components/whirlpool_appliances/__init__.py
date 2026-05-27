@@ -41,6 +41,7 @@ PLATFORMS = [
     Platform.BUTTON,
     Platform.SWITCH,
     Platform.LOCK,
+    Platform.NUMBER,
     Platform.SELECT,
     Platform.TIME,
     Platform.UPDATE,
