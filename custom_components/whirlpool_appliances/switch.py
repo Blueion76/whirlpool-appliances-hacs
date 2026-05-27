@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import WhirlpoolApkConfigEntry
 from .api import appliance_said
-from .entity import WhirlpoolApkEntity, attr_value, entity_name_from_key, find_key, is_cooking_appliance, microwave_exists
+from .entity import WhirlpoolApkEntity, attr_value, entity_name_from_key, find_key, is_aircon_appliance, is_cooking_appliance, microwave_exists
 
 
 def _to_bool(value: Any) -> bool | None:
@@ -29,6 +29,7 @@ class WhirlpoolSwitchDescription(SwitchEntityDescription):
     cooking_only: bool = False
     non_cooking_only: bool = False
     microwave_only: bool = False
+    aircon_only: bool = False
 
 
 async def _set_power(client, said: str, on: bool):
@@ -52,6 +53,10 @@ async def _set_microwave_turntable(client, said: str, on: bool):
     return await client.set_microwave_turntable(said, on)
 
 
+async def _set_aircon_quiet_mode(client, said: str, on: bool):
+    return await client.set_aircon_quiet_mode(said, on)
+
+
 async def _set_time_auto_update(client, said: str, on: bool):
     return await client.set_time_auto_update(said, on)
 
@@ -61,6 +66,11 @@ SWITCHES = (
     WhirlpoolSwitchDescription(key="remote_enable", translation_key="remote_enable", icon="mdi:cloud-check-variant", value_fn=lambda flat: _to_bool(attr_value(flat, "XCat_RemoteSetRemoteControlEnable")), set_fn=_set_remote_enable, cooking_only=True),
     WhirlpoolSwitchDescription(key="sabbath_mode", translation_key="sabbath_mode", icon="mdi:candelabra-fire", entity_registry_enabled_default=False, value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OperationSetSabbathModeEnabled")), set_fn=_set_sabbath, cooking_only=True),
     WhirlpoolSwitchDescription(key="quiet_mode", translation_key="quiet_mode", icon="mdi:volume-high", value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OperationSetQuietModeEnabled")), set_fn=_set_quiet_mode, cooking_only=True),
+    WhirlpoolSwitchDescription(key="ac_quiet_mode", translation_key="ac_quiet_mode", icon="mdi:volume-high", value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OpSetQuietModeEnabled") or find_key(flat, ("quietMode", "quiet", "acQuietMode"))), set_fn=_set_aircon_quiet_mode, aircon_only=True),
+    WhirlpoolSwitchDescription(key="ac_turbo_mode", translation_key="ac_turbo_mode", icon="mdi:fan-plus", value_fn=lambda flat: _to_bool(attr_value(flat, "Cavity_OpSetTurboMode")), set_fn=_set_aircon_turbo_mode, aircon_only=True),
+    WhirlpoolSwitchDescription(key="ac_eco_mode", translation_key="ac_eco_mode", icon="mdi:leaf", value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OpSetEcoModeEnabled")), set_fn=_set_aircon_eco_mode, aircon_only=True),
+    WhirlpoolSwitchDescription(key="ac_display", translation_key="ac_display", icon="mdi:monitor", value_fn=lambda flat: attr_value(flat, "Sys_DisplaySetBrightness") == "4", set_fn=_set_aircon_display_on, aircon_only=True),
+    WhirlpoolSwitchDescription(key="ac_horizontal_louver_swing", translation_key="ac_horizontal_louver_swing", icon="mdi:arrow-split-horizontal", value_fn=lambda flat: _to_bool(attr_value(flat, "Cavity_OpSetHorzLouverSwing")), set_fn=_set_aircon_horizontal_louver_swing, aircon_only=True),
     WhirlpoolSwitchDescription(key="time_auto_update", translation_key="time_auto_update", icon="mdi:cloud-download", value_fn=lambda flat: str(attr_value(flat, "DateTimeMode") or attr_value(flat, "XCat_DateTimeMode") or "") == "2", set_fn=_set_time_auto_update, cooking_only=True),
     WhirlpoolSwitchDescription(key="microwave_turntable", translation_key="microwave_turntable", icon="mdi:microwave", value_fn=lambda flat: _to_bool(attr_value(flat, "Mwo_CycleSetTurntable")), set_fn=_set_microwave_turntable, cooking_only=True, microwave_only=True),
 )
@@ -73,6 +83,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
         if not appliance_said(appliance):
             continue
         cooking = is_cooking_appliance(appliance)
+        aircon = is_aircon_appliance(appliance)
         flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
         has_mwo = microwave_exists(flat)
         for desc in SWITCHES:
@@ -89,6 +100,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
             # set_oven_cook service to start cooking and the Stop Oven/Microwave
             # buttons to cancel.
             if desc.cooking_only and not cooking:
+                continue
+            if desc.aircon_only and not aircon:
                 continue
             if desc.non_cooking_only and cooking:
                 continue

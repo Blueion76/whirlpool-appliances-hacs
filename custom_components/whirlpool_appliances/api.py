@@ -391,7 +391,14 @@ class WhirlpoolCloudClient:
             # required or optional.
             raise WhirlpoolAuthError(f"HTTP {resp.status}: {text[:500]}")
         if resp.status >= 400:
-            _LOGGER.warning(
+            # Some discovery endpoints are optional fallbacks. A 404 from the
+            # ADRS registration endpoint is expected for many legacy accounts
+            # and should not spam HA warnings on every coordinator refresh.
+            log_method = _LOGGER.debug if (
+                resp.status == 404
+                and "/adrs/api/v2/registrations/accounts/" in str(resp.url.path)
+            ) else _LOGGER.warning
+            log_method(
                 "Whirlpool API error response: status=%s url=%s body=%s",
                 resp.status,
                 resp.url.path,
@@ -486,7 +493,7 @@ class WhirlpoolCloudClient:
                         key = appliance_said(item) or appliance_id(item) or repr(item)
                         appliances[key] = {**appliances.get(key, {}), **item}
                 except WhirlpoolApiError as err:
-                    _LOGGER.debug("Appliance listing endpoint failed: %s", err)
+                    _LOGGER.debug("Optional appliance listing endpoint failed: path=%s error=%s", path, err)
         for loc in await self.list_locations():
             loc_id = _first_value(loc, ("locationId", "id"))
             if not loc_id:
@@ -895,6 +902,101 @@ class WhirlpoolCloudClient:
             complete,
         )
         return await self.send_attributes(said, attrs)
+
+
+    async def set_aircon(
+        self,
+        said: str,
+        *,
+        mode: str | None = None,
+        target_temperature: float | None = None,
+        fan_speed: str | None = None,
+    ) -> Any:
+        """Set Whirlpool legacy AirConnect AC attributes.
+
+        Attribute names and enum values match abmantis/whirlpool-sixth-sense:
+        - power: Sys_OpSetPowerOn, 0/1
+        - target temp: Sys_OpSetTargetTemp, tenths of °C
+        - mode: Cavity_OpSetMode, cool=1, fan=2, heat=3, sixth sense=4
+        - fan speed: Cavity_OpSetFanSpeed, off=0, auto=1, low=2, medium=4, high=6
+        """
+        mode_map = {
+            "off": "off",
+            "cool": "1",
+            "heat": "3",
+            "fan_only": "2",
+            "fan": "2",
+            "sixth_sense": "4",
+            "sixthsense": "4",
+            "auto": "4",
+            "heat_cool": "4",
+        }
+        fan_map = {
+            "off": "0",
+            "auto": "1",
+            "low": "2",
+            "medium": "4",
+            "med": "4",
+            "high": "6",
+        }
+
+        attrs: dict[str, str] = {}
+        if mode is not None:
+            selected = mode_map.get(str(mode).lower())
+            if selected is None:
+                raise WhirlpoolApiError(f"Unsupported air conditioner mode: {mode}")
+            if selected == "off":
+                attrs["Sys_OpSetPowerOn"] = "0"
+            else:
+                attrs["Sys_OpSetPowerOn"] = "1"
+                attrs["Cavity_OpSetMode"] = selected
+
+        if target_temperature is not None:
+            attrs["Sys_OpSetTargetTemp"] = str(int(round(float(target_temperature) * 10)))
+
+        if fan_speed is not None:
+            selected_fan = fan_map.get(str(fan_speed).lower())
+            if selected_fan is None:
+                raise WhirlpoolApiError(f"Unsupported air conditioner fan speed: {fan_speed}")
+            attrs["Cavity_OpSetFanSpeed"] = selected_fan
+
+        _LOGGER.debug("Preparing Whirlpool AirConnect AC command: said=%s attrs=%s", said, summarize(attrs))
+        return await self.send_attributes(said, attrs)
+
+    async def stop_aircon(self, said: str) -> Any:
+        """Stop legacy AirConnect AC."""
+        return await self.set_aircon(said, mode="off")
+
+    async def set_aircon_quiet_mode(self, said: str, on: bool) -> Any:
+        """Set legacy AirConnect quiet mode."""
+        attrs = {"Sys_OpSetQuietModeEnabled": "1" if on else "0"}
+        _LOGGER.debug("Preparing Whirlpool AirConnect quiet-mode command: said=%s attrs=%s", said, summarize(attrs))
+        return await self.send_attributes(said, attrs)
+
+    async def set_aircon_turbo_mode(self, said: str, on: bool) -> Any:
+        """Set legacy AirConnect turbo mode."""
+        attrs = {"Cavity_OpSetTurboMode": "1" if on else "0"}
+        _LOGGER.debug("Preparing Whirlpool AirConnect turbo-mode command: said=%s attrs=%s", said, summarize(attrs))
+        return await self.send_attributes(said, attrs)
+
+    async def set_aircon_eco_mode(self, said: str, on: bool) -> Any:
+        """Set legacy AirConnect eco mode."""
+        attrs = {"Sys_OpSetEcoModeEnabled": "1" if on else "0"}
+        _LOGGER.debug("Preparing Whirlpool AirConnect eco-mode command: said=%s attrs=%s", said, summarize(attrs))
+        return await self.send_attributes(said, attrs)
+
+    async def set_aircon_display_on(self, said: str, on: bool) -> Any:
+        """Set legacy AirConnect display brightness on/off."""
+        attrs = {"Sys_DisplaySetBrightness": "4" if on else "0"}
+        _LOGGER.debug("Preparing Whirlpool AirConnect display command: said=%s attrs=%s", said, summarize(attrs))
+        return await self.send_attributes(said, attrs)
+
+    async def set_aircon_horizontal_louver_swing(self, said: str, on: bool) -> Any:
+        """Set legacy AirConnect horizontal louver swing."""
+        attrs = {"Cavity_OpSetHorzLouverSwing": "1" if on else "0"}
+        _LOGGER.debug("Preparing Whirlpool AirConnect horizontal-louver command: said=%s attrs=%s", said, summarize(attrs))
+        return await self.send_attributes(said, attrs)
+
 
     async def stop_oven_cavity(self, said: str, cavity: str | None = None) -> Any:
         prefix = self._cavity_prefix(cavity)

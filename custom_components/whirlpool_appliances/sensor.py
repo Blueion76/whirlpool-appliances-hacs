@@ -93,6 +93,57 @@ DOOR_STATE = {
 }
 
 
+# Whirlpool/Maytag TS laundry fields and values are based on
+# pickerin/maytag_laundry_homeassistant sensor extraction.
+LAUNDRY_FAULT_DESCRIPTIONS = {
+    "F0E2": "Lid/door lock fault",
+    "F0E3": "Unbalanced load",
+    "F0E7": "Motor control fault",
+    "F0E8": "Lid/door switch open during cycle",
+    "F0E9": "Overcurrent on lid lock",
+    "F2E1": "Keypad/user interface fault",
+    "F2E2": "User interface disconnected",
+    "F3E1": "Exhaust thermistor open/shorted",
+    "F3E2": "Pressure sensor fault",
+    "F3E3": "Moisture sensor fault",
+    "F3E5": "Inlet thermistor fault",
+    "F3E6": "Outlet thermistor fault",
+    "F4E1": "Heating element fault",
+    "F4E2": "Heating element relay fault",
+    "F4E4": "High-limit thermostat fault",
+    "F5E1": "Lid lock failure — lid cannot lock",
+    "F5E3": "Lid lock failure — lid cannot unlock",
+    "F5E4": "Lid lock fault (thermal)",
+    "F6E1": "Communication fault — main control to UI",
+    "F6E2": "Communication fault — main control to motor",
+    "F6E3": "Communication fault — main control to UI",
+    "F7E1": "Motor fault",
+    "F7E3": "Motor fault — speed error",
+    "F7E4": "Motor fault — overcurrent",
+    "F8E1": "Water inlet fault — no water detected",
+    "F8E3": "Overflow fault",
+    "F8E6": "Suds detected",
+    "F9E1": "Drain fault — water not draining",
+    "F9E3": "Vent blockage detected",
+}
+
+LAUNDRY_OPTION_KEYS = (
+    "soilLevel",
+    "spinSpeed",
+    "washTemperature",
+    "waterLevel",
+    "extraRinse",
+    "dispenser",
+    "dryTemperature",
+    "dryLevel",
+    "wrinkleShield",
+    "steam",
+    "dampDry",
+    "extraPower",
+    "pets",
+)
+
+
 @dataclass(frozen=True, kw_only=True)
 class WhirlpoolApkSensorDescription(SensorEntityDescription):
     value_fn: Callable[[Mapping[str, Any]], Any | None]
@@ -361,8 +412,7 @@ def _end_time(flat: Mapping[str, Any]) -> Any | None:
         return None
 
 
-def _active_fault(flat: Mapping[str, Any]) -> Any | None:
-    value = find_key(flat, ("activeFault", "faultCode", "errorCode", "alarmCode"))
+def _normalize_fault(value: Any) -> Any | None:
     if value in (None, "", 0, False):
         return "Clear"
     if isinstance(value, str) and value.strip().lower() in {
@@ -379,7 +429,48 @@ def _active_fault(flat: Mapping[str, Any]) -> Any | None:
         "no error",
     }:
         return "Clear"
+    code = str(value).strip()
+    return LAUNDRY_FAULT_DESCRIPTIONS.get(code, code)
+
+
+def _active_fault(flat: Mapping[str, Any]) -> Any | None:
+    return _normalize_fault(find_key(flat, ("activeFault", "faultCode", "errorCode", "alarmCode")))
+
+
+def _last_fault(flat: Mapping[str, Any]) -> Any | None:
+    history = find_key(flat, ("faultHistory", "errors", "faults", "faultHistory.0"))
+    if isinstance(history, list):
+        for code in history:
+            normalized = _normalize_fault(code)
+            if normalized not in (None, "Clear"):
+                return normalized
+        return "Clear"
+    return _normalize_fault(history)
+
+
+def _laundry_remote_start_enable(flat: Mapping[str, Any]) -> str | None:
+    raw = find_key(flat, ("remoteStartEnable", "remoteStart", "remoteEnabled", "remoteControlEnable"))
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return "on" if raw.lower() in {"1", "true", "on", "yes", "enabled"} else "off"
+    return "on" if bool(raw) else "off"
+
+
+def _laundry_option(key: str) -> Callable[[Mapping[str, Any]], Any | None]:
+    return lambda flat: find_key(flat, (f"washer.{key}", f"dryer.{key}", key))
+
+
+def _laundry_bool_option(key: str) -> Callable[[Mapping[str, Any]], Any | None]:
+    def value(flat: Mapping[str, Any]) -> str | None:
+        raw = find_key(flat, (f"washer.{key}", f"dryer.{key}", key))
+        if raw is None:
+            return None
+        if isinstance(raw, str):
+            return "on" if raw.lower() in {"1", "true", "on", "yes", "enabled"} else "off"
+        return "on" if bool(raw) else "off"
     return value
+
 
 
 def _normalized_str(raw: Any) -> str | None:
@@ -468,7 +559,7 @@ def _laundry_cycle_phase_state(flat: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _laundry_time_remaining_seconds(flat: Mapping[str, Any]) -> int | None:
+def _laundry_time_remaining_minutes(flat: Mapping[str, Any]) -> int | None:
     raw = find_key(
         flat,
         (
@@ -483,10 +574,11 @@ def _laundry_time_remaining_seconds(flat: Mapping[str, Any]) -> int | None:
     value = _int_value(raw)
     if value is None or value < 0:
         return None
-    # ThingShield cycleTime.time is seconds. Some legacy payloads report minutes.
+    # ThingShield cycleTime.time is seconds. Convert to minutes like the
+    # Maytag Laundry integration.
     if value > 14 * 24 * 60 * 60:
         return None
-    return value
+    return int((value + 59) // 60)
 
 
 def _laundry_end_time(flat: Mapping[str, Any]) -> Any | None:
@@ -498,10 +590,10 @@ def _laundry_end_time(flat: Mapping[str, Any]) -> Any | None:
         except (OverflowError, OSError, ValueError):
             return None
 
-    seconds = _laundry_time_remaining_seconds(flat)
-    if seconds is None:
+    minutes = _laundry_time_remaining_minutes(flat)
+    if minutes is None:
         return None
-    return dt_util.utcnow() + timedelta(seconds=seconds)
+    return dt_util.utcnow() + timedelta(minutes=minutes)
 
 
 def _map_value(raw: Any, mapping: Mapping[str, str]) -> str | None:
@@ -660,7 +752,26 @@ SENSOR_DESCRIPTIONS: tuple[WhirlpoolApkSensorDescription, ...] = (
     WhirlpoolApkSensorDescription(key="laundry_state", translation_key="laundry_state", icon="mdi:washing-machine", device_class=SensorDeviceClass.ENUM, options=LAUNDRY_STATE_OPTIONS, value_fn=_laundry_state, laundry_only=True),
     WhirlpoolApkSensorDescription(key="laundry_cycle", translation_key="laundry_cycle", icon="mdi:washing-machine", value_fn=_by_keys("washer.cycleName", "dryer.cycleName", "cycleName", "cycle", "currentCycle"), laundry_only=True),
     WhirlpoolApkSensorDescription(key="laundry_phase", translation_key="laundry_phase", icon="mdi:progress-clock", value_fn=_by_keys("washer.currentPhase", "dryer.currentPhase", "currentPhase", "cyclePhase"), laundry_only=True),
-    WhirlpoolApkSensorDescription(key="laundry_time_remaining", translation_key="laundry_time_remaining", icon="mdi:timer-outline", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="s", value_fn=_laundry_time_remaining_seconds, laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_time_remaining", translation_key="laundry_time_remaining", icon="mdi:timer-outline", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement="min", value_fn=_laundry_time_remaining_minutes, laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_door_status", translation_key="laundry_door_status", icon="mdi:door", device_class=SensorDeviceClass.ENUM, options=["Open", "Closed"], value_fn=lambda flat: _map_value(find_key(flat, ("washer.doorStatus", "dryer.doorStatus", "doorStatus")), DOOR_STATE), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_last_fault", translation_key="laundry_last_fault", icon="mdi:alert-circle", value_fn=_last_fault, laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_remote_start_enable", translation_key="laundry_remote_start_enable", icon="mdi:remote", device_class=SensorDeviceClass.ENUM, options=["On", "Off"], value_fn=_laundry_remote_start_enable, laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_soil_level", translation_key="laundry_soil_level", icon="mdi:layers", value_fn=_laundry_option("soilLevel"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_spin_speed", translation_key="laundry_spin_speed", icon="mdi:rotate-right", value_fn=_laundry_option("spinSpeed"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_wash_temperature", translation_key="laundry_wash_temperature", icon="mdi:thermometer-water", value_fn=_laundry_option("washTemperature"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_water_level", translation_key="laundry_water_level", icon="mdi:cup-water", value_fn=_laundry_option("waterLevel"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_extra_rinse", translation_key="laundry_extra_rinse", icon="mdi:water-plus", value_fn=_laundry_option("extraRinse"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_dispenser", translation_key="laundry_dispenser", icon="mdi:spray", value_fn=_laundry_option("dispenser"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_dry_temperature", translation_key="laundry_dry_temperature", icon="mdi:thermometer", value_fn=_laundry_option("dryTemperature"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_dry_level", translation_key="laundry_dry_level", icon="mdi:hair-dryer", value_fn=_laundry_option("dryLevel"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_wrinkle_shield", translation_key="laundry_wrinkle_shield", icon="mdi:iron", value_fn=_laundry_option("wrinkleShield"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_steam", translation_key="laundry_steam", icon="mdi:cloud", value_fn=_laundry_option("steam"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_damp_dry", translation_key="laundry_damp_dry", icon="mdi:water-outline", value_fn=_laundry_option("dampDry"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_extra_power", translation_key="laundry_extra_power", icon="mdi:lightning-bolt", value_fn=_laundry_option("extraPower"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_pets", translation_key="laundry_pets", icon="mdi:paw", value_fn=_laundry_option("pets"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_low_air_flow", translation_key="laundry_low_air_flow", icon="mdi:air-filter", device_class=SensorDeviceClass.ENUM, options=["On", "Off"], value_fn=_laundry_bool_option("lowAirFlow"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_lint_trap", translation_key="laundry_lint_trap", icon="mdi:filter", device_class=SensorDeviceClass.ENUM, options=["On", "Off"], value_fn=_laundry_bool_option("lintTrap"), laundry_only=True),
+    WhirlpoolApkSensorDescription(key="laundry_drum_light", translation_key="laundry_drum_light", icon="mdi:lightbulb", device_class=SensorDeviceClass.ENUM, options=["On", "Off"], value_fn=_laundry_bool_option("drumLight"), laundry_only=True),
     WhirlpoolApkSensorDescription(key="laundry_end_time", translation_key="laundry_end_time", icon="mdi:progress-clock", device_class=SensorDeviceClass.TIMESTAMP, value_fn=_laundry_end_time, laundry_only=True),
     WhirlpoolApkSensorDescription(key="system_version", translation_key="system_version", icon="mdi:chip", value_fn=_by_keys("systemVersion", "firmwareVersion", "softwareVersion"), laundry_only=True),
     WhirlpoolApkSensorDescription(key="dishwasher_state", translation_key="dishwasher_state", icon="mdi:dishwasher", device_class=SensorDeviceClass.ENUM, options=list(DISHWASHER_STATE.values()), value_fn=_dishwasher_state, dishwasher_only=True),

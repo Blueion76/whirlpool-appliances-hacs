@@ -145,6 +145,9 @@
       },
       "oven_climate": {
         "name": "Oven"
+      },
+      "aircon_climate": {
+        "name": "Air conditioner"
       }
     },
     "light": {
@@ -348,6 +351,63 @@
       },
       "cooktop_state": {
         "name": "Cooktop state"
+      },
+      "laundry_door_status": {
+        "name": "Laundry Door"
+      },
+      "laundry_last_fault": {
+        "name": "Laundry Last Fault"
+      },
+      "laundry_remote_start_enable": {
+        "name": "Laundry Remote Start Enable"
+      },
+      "laundry_soil_level": {
+        "name": "Laundry Soil Level"
+      },
+      "laundry_spin_speed": {
+        "name": "Laundry Spin Speed"
+      },
+      "laundry_wash_temperature": {
+        "name": "Laundry Wash Temperature"
+      },
+      "laundry_water_level": {
+        "name": "Laundry Water Level"
+      },
+      "laundry_extra_rinse": {
+        "name": "Laundry Extra Rinse"
+      },
+      "laundry_dispenser": {
+        "name": "Laundry Dispenser"
+      },
+      "laundry_dry_temperature": {
+        "name": "Laundry Dry Temperature"
+      },
+      "laundry_dry_level": {
+        "name": "Laundry Dry Level"
+      },
+      "laundry_wrinkle_shield": {
+        "name": "Laundry Wrinkle Shield"
+      },
+      "laundry_steam": {
+        "name": "Laundry Steam"
+      },
+      "laundry_damp_dry": {
+        "name": "Laundry Damp Dry"
+      },
+      "laundry_extra_power": {
+        "name": "Laundry Extra Power"
+      },
+      "laundry_pets": {
+        "name": "Laundry Pets"
+      },
+      "laundry_low_air_flow": {
+        "name": "Laundry Low Air Flow"
+      },
+      "laundry_lint_trap": {
+        "name": "Laundry Lint Trap"
+      },
+      "laundry_drum_light": {
+        "name": "Laundry Drum Light"
       }
     },
     "switch": {
@@ -368,6 +428,21 @@
       },
       "remote_enable": {
         "name": "Remote enable"
+      },
+      "ac_quiet_mode": {
+        "name": "AC quiet mode"
+      },
+      "ac_turbo_mode": {
+        "name": "AC turbo mode"
+      },
+      "ac_eco_mode": {
+        "name": "AC eco mode"
+      },
+      "ac_display": {
+        "name": "AC display"
+      },
+      "ac_horizontal_louver_swing": {
+        "name": "AC horizontal louver swing"
       }
     },
     "firmware_update": {

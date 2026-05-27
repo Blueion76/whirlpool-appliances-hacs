@@ -21,6 +21,13 @@ call_api:
       required: false
       selector:
         object:
+    auth:
+      name: Send Authorization header
+      description: Turn off for public/static endpoints like /api/v1/contents/all/... that reject the normal OAuth Authorization header.
+      required: false
+      default: true
+      selector:
+        boolean:
 
 send_appliance_command:
   name: Send appliance command

@@ -35,6 +35,7 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
+    Platform.CLIMATE,
     Platform.LIGHT,
     Platform.BUTTON,
     Platform.SWITCH,
@@ -179,6 +180,7 @@ def _register_services(hass: HomeAssistant) -> None:
             path,
             json=call.data.get("body"),
             params=call.data.get("params"),
+            auth=call.data.get("auth", True),
         )
         return _service_result(result)
 
@@ -337,7 +339,13 @@ def _register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "call_api",
         call_api,
-        schema=vol.Schema({vol.Required("path"): str, vol.Optional("method", default="GET"): str, vol.Optional("body"): object, vol.Optional("params"): object}),
+        schema=vol.Schema({
+            vol.Required("path"): str,
+            vol.Optional("method", default="GET"): str,
+            vol.Optional("body"): object,
+            vol.Optional("params"): object,
+            vol.Optional("auth", default=True): bool,
+        }),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(

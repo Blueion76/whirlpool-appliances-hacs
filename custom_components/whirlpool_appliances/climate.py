@@ -26,6 +26,8 @@ from .entity import (
     attr_value,
     celsius_to_unit,
     entity_name_from_key,
+    find_key,
+    is_aircon_appliance,
     is_cooking_appliance,
     oven_cavity_exists,
     unit_to_celsius,
@@ -169,16 +171,226 @@ async def async_setup_entry(
     entities: list[ClimateEntity] = []
 
     for appliance in (coordinator.data or {}).get("appliances", []):
-        if not appliance_said(appliance) or not is_cooking_appliance(appliance):
+        if not appliance_said(appliance):
             continue
 
-        flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
-        if oven_cavity_exists(flat, "upper"):
-            entities.append(WhirlpoolOvenClimate(coordinator, appliance, "upper"))
-        if oven_cavity_exists(flat, "lower"):
-            entities.append(WhirlpoolOvenClimate(coordinator, appliance, "lower"))
+        # Oven control moved to number/select/button entities. Only expose
+        # climate for AirConnect air conditioners here.
+        if is_aircon_appliance(appliance):
+            entities.append(WhirlpoolAirConditionerClimate(coordinator, appliance))
 
     async_add_entities(entities)
+
+
+
+AC_STATUS_MODE_TO_HVAC = {
+    "1": HVACMode.COOL,
+    "2": HVACMode.FAN_ONLY,
+    "3": HVACMode.HEAT,
+    "5": HVACMode.FAN_ONLY,  # Sixth Sense Air
+    "6": HVACMode.HEAT,      # Sixth Sense Heat
+    "7": HVACMode.COOL,      # Sixth Sense Cool
+}
+HVAC_TO_AC_MODE = {
+    HVACMode.OFF: "off",
+    HVACMode.COOL: "cool",
+    HVACMode.HEAT: "heat",
+    HVACMode.FAN_ONLY: "fan",
+    HVACMode.HEAT_COOL: "sixth_sense",
+}
+AC_FAN_CODE_TO_NAME = {
+    "0": "Off",
+    "1": "Auto",
+    "2": "Low",
+    "4": "Medium",
+    "6": "High",
+}
+AC_FAN_NAME_TO_SERVICE = {
+    "Off": "off",
+    "Auto": "auto",
+    "Low": "low",
+    "Medium": "medium",
+    "High": "high",
+}
+
+
+def _first_attr(flat: Mapping[str, Any], *attrs: str) -> Any | None:
+    for attr in attrs:
+        value = attr_value(flat, attr)
+        if value is not None:
+            return value
+    return None
+
+
+def _first_key(flat: Mapping[str, Any], *keys: str) -> Any | None:
+    value = find_key(flat, keys)
+    if value is not None:
+        return value
+    return _first_attr(flat, *keys)
+
+
+def _temp_from_whirlpool(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    # AirConnect uses tenths of °C for Sys_OpStatusDisplayTemp and Sys_OpSetTargetTemp.
+    if abs(numeric) >= 100:
+        return numeric / 10
+    return numeric
+
+
+class WhirlpoolAirConditionerClimate(WhirlpoolApkEntity, ClimateEntity):
+    """Climate entity for Whirlpool AirConnect air conditioners."""
+
+    _attr_translation_key = "aircon_climate"
+    _attr_supported_features = (
+        ClimateEntityFeature.TARGET_TEMPERATURE
+        | ClimateEntityFeature.FAN_MODE
+        | ClimateEntityFeature.TURN_ON
+        | ClimateEntityFeature.TURN_OFF
+    )
+    _attr_hvac_modes = [
+        HVACMode.OFF,
+        HVACMode.COOL,
+        HVACMode.HEAT,
+        HVACMode.FAN_ONLY,
+        HVACMode.HEAT_COOL,
+    ]
+    _attr_fan_modes = list(AC_FAN_NAME_TO_SERVICE)
+
+    def __init__(self, coordinator, appliance: Mapping[str, Any]) -> None:
+        super().__init__(coordinator, appliance, "aircon_climate")
+        self._attr_name = entity_name_from_key("aircon_climate", appliance)
+
+    @property
+    def temperature_unit(self) -> UnitOfTemperature:
+        return super().temperature_unit
+
+    @property
+    def min_temp(self) -> float:
+        return 16.0 if self.temperature_unit == UnitOfTemperature.CELSIUS else 61.0
+
+    @property
+    def max_temp(self) -> float:
+        return 32.0 if self.temperature_unit == UnitOfTemperature.CELSIUS else 90.0
+
+    @property
+    def target_temperature_step(self) -> float:
+        return 1.0
+
+    def _display_temp(self, celsius: float | None) -> float | None:
+        if celsius is None:
+            return None
+        display = celsius_to_unit(celsius, self.temperature_unit)
+        return round(float(display), 1) if display is not None else None
+
+    def _command_temp_c(self, display_value: float | int | None) -> float | None:
+        return unit_to_celsius(display_value, self.temperature_unit)
+
+    @property
+    def current_temperature(self) -> float | None:
+        raw = _first_key(
+            self.flat_status,
+            "Sys_OpStatusDisplayTemp",
+            "AirConditioner_StatusRoomTemperature",
+            "AirConditioner_DisplStatusDisplayTemp",
+            "currentTemperature",
+            "temperature",
+        )
+        return self._display_temp(_temp_from_whirlpool(raw))
+
+    @property
+    def target_temperature(self) -> float | None:
+        raw = _first_key(
+            self.flat_status,
+            "Sys_OpSetTargetTemp",
+            "targetTemperature",
+            "targetTemp",
+            "setTemperature",
+        )
+        return self._display_temp(_temp_from_whirlpool(raw))
+
+    @property
+    def current_humidity(self) -> int | None:
+        raw = _first_key(self.flat_status, "Sys_OpStatusDisplayHumidity", "currentHumidity", "humidity")
+        try:
+            return int(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    @property
+    def hvac_mode(self) -> HVACMode:
+        power = _first_key(self.flat_status, "Sys_OpSetPowerOn", "powerOn", "isOn")
+        if str(power).strip().lower() in {"0", "off", "false", "standby"}:
+            return HVACMode.OFF
+
+        raw = _first_key(self.flat_status, "Cavity_OpStatusMode", "Cavity_OpSetMode", "mode", "operationMode")
+        if raw is None:
+            return HVACMode.COOL if str(power).strip().lower() in {"1", "on", "true"} else HVACMode.OFF
+        raw_text = str(raw).strip().lower()
+        if str(raw) in AC_STATUS_MODE_TO_HVAC:
+            return AC_STATUS_MODE_TO_HVAC[str(raw)]
+        if raw_text in {"cool", "cooling"}:
+            return HVACMode.COOL
+        if raw_text in {"heat", "heating"}:
+            return HVACMode.HEAT
+        if raw_text in {"fan", "fan_only", "fan only"}:
+            return HVACMode.FAN_ONLY
+        if raw_text in {"auto", "sixth_sense", "sixthsense", "heat_cool", "heat cool"}:
+            return HVACMode.HEAT_COOL
+        return HVACMode.COOL
+
+    @property
+    def hvac_action(self) -> HVACAction | None:
+        mode = self.hvac_mode
+        if mode == HVACMode.OFF:
+            return HVACAction.OFF
+        if mode == HVACMode.COOL:
+            return HVACAction.COOLING
+        if mode == HVACMode.HEAT:
+            return HVACAction.HEATING
+        if mode == HVACMode.FAN_ONLY:
+            return HVACAction.FAN
+        return HVACAction.IDLE
+
+    @property
+    def fan_mode(self) -> str | None:
+        raw = _first_key(self.flat_status, "Cavity_OpSetFanSpeed", "fanSpeed", "userFanSpeed")
+        if raw is None:
+            return None
+        if str(raw).title() in AC_FAN_NAME_TO_SERVICE:
+            return str(raw).title()
+        return AC_FAN_CODE_TO_NAME.get(str(raw), str(raw).replace("_", " ").title())
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        self._check_service_request(await self.client.set_aircon(self.said, mode=HVAC_TO_AC_MODE[hvac_mode]))
+        await self.coordinator.async_request_refresh()
+
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        if ATTR_TEMPERATURE not in kwargs:
+            return
+        target_c = self._command_temp_c(kwargs[ATTR_TEMPERATURE])
+        self._check_service_request(await self.client.set_aircon(self.said, target_temperature=target_c))
+        await self.coordinator.async_request_refresh()
+
+    async def async_set_fan_mode(self, fan_mode: str) -> None:
+        if fan_mode not in AC_FAN_NAME_TO_SERVICE:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
+        self._check_service_request(await self.client.set_aircon(self.said, fan_speed=AC_FAN_NAME_TO_SERVICE[fan_mode]))
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_on(self) -> None:
+        mode = self.hvac_mode
+        self._check_service_request(await self.client.set_aircon(self.said, mode="cool" if mode == HVACMode.OFF else HVAC_TO_AC_MODE[mode]))
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_off(self) -> None:
+        self._check_service_request(await self.client.stop_aircon(self.said))
+        await self.coordinator.async_request_refresh()
+
 
 
 class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
