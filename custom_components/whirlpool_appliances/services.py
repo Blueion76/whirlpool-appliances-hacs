@@ -64,6 +64,7 @@ ACCESSORY_ACTIONS = {
 FEATURE_ACTIONS = {
     "update_appliances",
     "get_ddm_content",
+    *ACCESSORY_ACTIONS,
     "get_notification_subscriptions",
     "get_notification_device",
     "get_ts_ota_status",
@@ -257,11 +258,13 @@ async def _feature_response(hass: HomeAssistant, call: ServiceCall) -> Any:
     params = dict(call.data.get("params") or {}) or None
     body = call.data.get("body")
 
-    if action in ACCESSORY_ACTIONS:
+    if action in ACCESSORY_ACTIONS and not _accessories_available(client):
         return {
-            "status": "disabled",
+            "status": "skipped",
             "action": action,
-            "reason": "Accessory endpoints are disabled because this account reports no accessories and Whirlpool returns Invalid Header Region.",
+            "reason": "Accessory endpoint was not available during integration startup probe, or the account returned no accessories.",
+            "accessories": getattr(client, "_whirlpool_accessories", []) or [],
+            "error": getattr(client, "_whirlpool_accessory_error", None),
         }
 
     accessory_headers = _accessory_headers(client)
@@ -329,8 +332,10 @@ async def _feature_response(hass: HomeAssistant, call: ServiceCall) -> Any:
     raise HomeAssistantError(f"Unsupported feature action: {action}")
 
 
-def _has_accessories(client: WhirlpoolCloudClient) -> bool:
-    """Return true if the account token reports at least one accessory."""
+def _accessories_available(client: WhirlpoolCloudClient) -> bool:
+    """Return true when the startup accessory probe found usable accessories."""
+    if getattr(client, "_whirlpool_accessory_probe_done", False):
+        return bool(getattr(client, "_whirlpool_accessory_available", False))
     auth_payload = getattr(client, "auth_payload", {}) or {}
     accessories = auth_payload.get("accessories")
     return isinstance(accessories, list) and len(accessories) > 0

@@ -1,6 +1,7 @@
 """Sensors for Whirlpool Appliances integration."""
 from __future__ import annotations
 
+import logging
 import json
 import time
 from collections.abc import Callable, Mapping
@@ -18,6 +19,8 @@ from . import WhirlpoolApkConfigEntry
 from .api import appliance_said, appliance_name
 from .const import CONF_EXPOSE_RAW_SENSORS
 from .entity import WhirlpoolApkEntity, attr_value, celsius_to_unit, entity_name_from_key, find_key, flatten, is_aircon_appliance, is_cooktop_appliance, is_cooking_appliance, is_dishwasher_appliance, is_laundry_appliance, is_refrigeration_appliance, microwave_exists, oven_cavity_exists
+
+_LOGGER = logging.getLogger(__name__)
 
 CAVITY_STATE = {"0": "Standby", "1": "Preheating", "2": "Cooking", "4": "Not Present"}
 COOK_MODE = {"0": "Standby", "2": "Bake", "6": "Convection Bake", "8": "Broil", "9": "Convection Broil", "16": "Convection Roast", "24": "Keep Warm", "41": "Air Fry"}
@@ -557,19 +560,73 @@ class WhirlpoolThingShieldSensor(WhirlpoolApkEntity, SensorEntity):
 
 
 async def _async_accessory_entities(coordinator) -> list[SensorEntity]:
-    """Create accessory/probe entities from the account accessory list."""
-    try:
-        payload = await coordinator.client.request("GET", "/api/v1/accessory")
-    except Exception:  # noqa: BLE001 - accessory endpoint is optional per account/region
+    """Create accessory/probe entities from the account accessory list.
+
+    The accessory API is optional and region/account dependent. Probe it once
+    at integration startup. If Whirlpool rejects it, remember that and do not
+    keep polling the accessory endpoints.
+    """
+    accessories = await _async_fetch_account_accessories_once(coordinator)
+    if not accessories:
         return []
+
     entities: list[SensorEntity] = []
-    for accessory in _coerce_accessories(payload):
+    for accessory in accessories:
         serial = _accessory_serial(accessory)
         if not serial:
             continue
         for key, definition in ACCESSORY_SENSOR_DEFINITIONS.items():
             entities.append(WhirlpoolAccessorySensor(coordinator, serial, accessory, key, definition))
     return entities
+
+
+async def _async_fetch_account_accessories_once(coordinator) -> list[Mapping[str, Any]]:
+    """Fetch account accessories once and cache whether the endpoint works."""
+    client = coordinator.client
+
+    if getattr(client, "_whirlpool_accessory_probe_done", False):
+        if not getattr(client, "_whirlpool_accessory_available", False):
+            return []
+        cached = getattr(client, "_whirlpool_accessories", []) or []
+        return [item for item in cached if isinstance(item, Mapping)]
+
+    setattr(client, "_whirlpool_accessory_probe_done", True)
+    try:
+        payload = await client.request("GET", "/api/v1/accessory", extra_headers=_accessory_headers(client))
+    except Exception as err:  # noqa: BLE001 - optional endpoint; disable after first failure
+        setattr(client, "_whirlpool_accessory_available", False)
+        setattr(client, "_whirlpool_accessory_error", str(err))
+        setattr(client, "_whirlpool_accessories", [])
+        _LOGGER.debug("Whirlpool accessory endpoint unavailable; accessory entities disabled: %s", err)
+        return []
+
+    accessories = _coerce_accessories(payload)
+    setattr(client, "_whirlpool_accessories", accessories)
+    setattr(client, "_whirlpool_accessory_available", bool(accessories))
+    setattr(client, "_whirlpool_accessory_error", None)
+
+    if accessories:
+        _LOGGER.debug("Whirlpool accessory endpoint returned %d accessory item(s)", len(accessories))
+    else:
+        _LOGGER.debug("Whirlpool accessory endpoint returned no accessories; accessory entities disabled")
+    return accessories
+
+
+def _accessory_headers(client) -> dict[str, str]:
+    """Return mobile-app headers used by accessory endpoints."""
+    region = str(getattr(client, "region", None) or "US").upper()
+    brand = str(getattr(client, "brand", None) or "WHIRLPOOL")
+    return {
+        "WP-CLIENT-BRAND": brand,
+        "WP-CLIENT-COUNTRY": region,
+        "WP-CLIENT-REGION": region,
+        "wp-client-brand": brand,
+        "wp-client-country": region,
+        "wp-client-region": region,
+        "x-client-brand": brand,
+        "x-client-country": region,
+        "x-client-region": region,
+    }
 
 
 def _coerce_accessories(payload: Any) -> list[Mapping[str, Any]]:
@@ -640,9 +697,15 @@ class WhirlpoolAccessorySensor(SensorEntity):
         return {"serial_number": self.serial, "status": self._payload}
 
     async def async_update(self) -> None:
+        client = self.coordinator.client
+        if getattr(client, "_whirlpool_accessory_probe_done", False) and not getattr(client, "_whirlpool_accessory_available", False):
+            return
         try:
-            payload = await self.coordinator.client.request("GET", f"/api/v1/accessory/{self.serial}")
-        except Exception:  # noqa: BLE001 - keep last known accessory state
+            payload = await client.request("GET", f"/api/v1/accessory/{self.serial}", extra_headers=_accessory_headers(client))
+        except Exception as err:  # noqa: BLE001 - stop polling if accessory endpoint later becomes unavailable
+            setattr(client, "_whirlpool_accessory_available", False)
+            setattr(client, "_whirlpool_accessory_error", str(err))
+            _LOGGER.debug("Whirlpool accessory status endpoint unavailable; stopping accessory polling: %s", err)
             return
         if isinstance(payload, Mapping):
             self._payload = payload

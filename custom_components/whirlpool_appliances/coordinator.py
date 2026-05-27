@@ -285,6 +285,30 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 existing = self._latest_statuses.get(said)
                 push_state = self.legacy_push_manager.states.get(said)
 
+                # /api/v1/appliance/status/<SAID> can return only
+                # claimStatus/online for legacy appliances. Fall back to the
+                # full appliance endpoint before relying only on websocket or
+                # previous state, because the full endpoint is where Whirlpool
+                # exposes the complete attributes payload for these models.
+                if not _has_attribute_payload(rest_status):
+                    try:
+                        full_status = await self.client.get_appliance(said)
+                    except WhirlpoolApiError as err:
+                        _LOGGER.debug(
+                            "Whirlpool full appliance fallback failed for %s: %s",
+                            said,
+                            err,
+                        )
+                    else:
+                        if _has_attribute_payload(full_status):
+                            _LOGGER.debug(
+                                "Using Whirlpool full appliance payload as status baseline for %s because status endpoint was shallow. status_shape=%s full_shape=%s",
+                                said,
+                                summarize_keys(rest_status),
+                                summarize_keys(full_status),
+                            )
+                            rest_status = _merge_status(rest_status, full_status)
+
                 # Use REST when it is a full/entity-safe status.
                 if _has_entity_safe_status(rest_status):
                     status = rest_status
