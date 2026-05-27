@@ -18,7 +18,7 @@ from homeassistant.util import dt as dt_util
 from . import WhirlpoolApkConfigEntry
 from .api import appliance_said, appliance_name
 from .const import CONF_EXPOSE_RAW_SENSORS
-from .entity import WhirlpoolApkEntity, attr_value, celsius_to_unit, entity_name_from_key, find_key, flatten, is_aircon_appliance, is_cooktop_appliance, is_cooking_appliance, is_dishwasher_appliance, is_laundry_appliance, is_refrigeration_appliance, microwave_exists, oven_cavity_exists
+from .entity import WhirlpoolApkEntity, attr_value, entity_name_from_key, find_key, flatten, is_aircon_appliance, is_cooktop_appliance, is_cooking_appliance, is_dishwasher_appliance, is_laundry_appliance, is_refrigeration_appliance, microwave_exists, oven_cavity_exists
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -409,7 +409,13 @@ class WhirlpoolApkSensor(WhirlpoolApkEntity, SensorEntity):
 
     @property
     def native_unit_of_measurement(self) -> str | None:
-        return self.temperature_unit if self.entity_description.device_class == SensorDeviceClass.TEMPERATURE else self.entity_description.native_unit_of_measurement
+        return self.entity_description.native_unit_of_measurement
+
+    @property
+    def suggested_display_precision(self) -> int | None:
+        if self.entity_description.device_class == SensorDeviceClass.TEMPERATURE:
+            return 0
+        return self.entity_description.suggested_display_precision
 
     @property
     def icon(self) -> str | None:
@@ -423,7 +429,7 @@ class WhirlpoolApkSensor(WhirlpoolApkEntity, SensorEntity):
     def native_value(self) -> Any | None:
         value = self.entity_description.value_fn(self.flat_status)
         if self.entity_description.device_class == SensorDeviceClass.TEMPERATURE and isinstance(value, (int, float)):
-            return celsius_to_unit(value, self.temperature_unit)
+            return value
         if isinstance(value, bool):
             return str(value).lower()
         if isinstance(value, (dict, list)):
@@ -677,6 +683,12 @@ class WhirlpoolAccessorySensor(SensorEntity):
             "model": _first_flat(self._payload, "model", "modelNumber", "type", "accessoryType"),
             "sw_version": _first_flat(self._payload, "firmwareVersion", "probeFirmwareVersion", "softwareVersion"),
         }
+
+    @property
+    def suggested_display_precision(self) -> int | None:
+        if self._attr_device_class == SensorDeviceClass.TEMPERATURE:
+            return 0
+        return None
 
     @property
     def native_value(self) -> Any | None:

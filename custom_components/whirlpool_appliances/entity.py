@@ -448,9 +448,13 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
 
     @property
     def temperature_unit(self) -> UnitOfTemperature:
-        """Return preferred HA display temperature unit for this config entry."""
-        region = getattr(self.coordinator.client, "region", None)
-        return temperature_unit_for_region(region)
+        """Return the native temperature unit used by Whirlpool payloads.
+
+        Whirlpool legacy cooking values are normalized to Celsius before being
+        exposed to Home Assistant. Home Assistant/frontend handles user-facing
+        conversion to Fahrenheit or Celsius from the entity's native unit.
+        """
+        return UnitOfTemperature.CELSIUS
 
     @property
     def available(self) -> bool:

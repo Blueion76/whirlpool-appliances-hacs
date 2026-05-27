@@ -5,7 +5,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from homeassistant.components.number import NumberEntity, NumberEntityDescription, NumberMode
+from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberEntityDescription, NumberMode
 from homeassistant.const import PERCENTAGE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
@@ -25,13 +25,11 @@ from .helpers.control import (
 from .entity import (
     WhirlpoolApkEntity,
     attr_value,
-    celsius_to_unit,
     entity_name_from_key,
     find_key,
     is_cooking_appliance,
     microwave_exists,
     oven_cavity_exists,
-    unit_to_celsius,
 )
 from .helpers.logging import summarize
 from .helpers.oven_options import current_oven_options, local_options, minutes_to_seconds, update_local_options
@@ -55,15 +53,18 @@ def _fahrenheit_to_celsius(value: float) -> float:
     return (float(value) - 32) * 5 / 9
 
 
-def _allowed_oven_temperatures(unit: UnitOfTemperature) -> tuple[float, ...]:
-    temps_f = tuple(range(175, 551, 5))
-    if unit == UnitOfTemperature.FAHRENHEIT:
-        return tuple(float(v) for v in temps_f)
-    return tuple(round(_fahrenheit_to_celsius(v), 1) for v in temps_f)
+def _allowed_oven_temperatures() -> tuple[float, ...]:
+    """Return Whirlpool oven setpoints in native Celsius units.
+
+    Whirlpool exposes oven temperatures as Celsius/tenths of Celsius, while
+    common oven setpoints are 5 °F increments. Keep the native values in
+    Celsius so Home Assistant can convert them for display.
+    """
+    return tuple(round(_fahrenheit_to_celsius(v), 1) for v in range(175, 551, 5))
 
 
-def _snap_oven_temperature(value: float, unit: UnitOfTemperature) -> float:
-    allowed = _allowed_oven_temperatures(unit)
+def _snap_oven_temperature(value: float) -> float:
+    allowed = _allowed_oven_temperatures()
     return min(allowed, key=lambda allowed_value: abs(allowed_value - float(value)))
 
 
@@ -143,24 +144,24 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, NumberEntity):
         self.cavity = cavity
         suffix = f"{cavity}_target_temperature_setpoint" if cavity else "target_temperature_setpoint"
         super().__init__(coordinator, appliance, suffix)
-        unit = self.temperature_unit
         self.entity_description = NumberEntityDescription(
             key=suffix,
             translation_key=suffix,
-            native_min_value=_allowed_oven_temperatures(unit)[0],
-            native_max_value=_allowed_oven_temperatures(unit)[-1],
-            native_step=5 if unit == UnitOfTemperature.FAHRENHEIT else 1,
-            native_unit_of_measurement=unit,
+            device_class=NumberDeviceClass.TEMPERATURE,
+            native_min_value=_allowed_oven_temperatures()[0],
+            native_max_value=_allowed_oven_temperatures()[-1],
+            native_step=0.1,
+            native_unit_of_measurement=UnitOfTemperature.CELSIUS,
             mode=NumberMode.BOX,
         )
+        self._attr_suggested_display_precision = 0
         self._attr_name = entity_name_from_key(suffix, appliance)
 
     @property
     def native_value(self) -> float | None:
         local = local_options(self.coordinator, self.said, self.cavity)
         if "target_temp" in local:
-            display = celsius_to_unit(local["target_temp"], self.temperature_unit)
-            return _snap_oven_temperature(display, self.temperature_unit) if display is not None else None
+            return _snap_oven_temperature(float(local["target_temp"]))
 
         if self.cavity == "upper":
             value = _temp_from_tenths(attr_value(self.flat_status, "OvenUpperCavity_CycleSetTargetTemp"))
@@ -178,12 +179,10 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, NumberEntity):
         if value is None:
             return None
 
-        display_value = celsius_to_unit(value, self.temperature_unit)
-        return _snap_oven_temperature(display_value, self.temperature_unit) if display_value is not None else None
+        return _snap_oven_temperature(value)
 
     async def async_set_native_value(self, value: float) -> None:
-        snapped = _snap_oven_temperature(value, self.temperature_unit)
-        celsius = unit_to_celsius(snapped, self.temperature_unit) or 176.6
+        celsius = _snap_oven_temperature(value)
         if self.cavity in ("upper", "lower") and oven_is_active(self.flat_status, self.cavity):
             options = current_oven_options(self.coordinator, self.said, self.cavity, self.flat_status)
             options["target_temp"] = celsius
@@ -254,19 +253,21 @@ class WhirlpoolMicrowaveNumber(WhirlpoolApkEntity, NumberEntity):
                 mode=NumberMode.BOX,
             )
         else:
-            unit = self.temperature_unit
             desc = NumberEntityDescription(
                 key=key,
                 translation_key=key,
                 icon="mdi:thermometer",
+                device_class=NumberDeviceClass.TEMPERATURE,
                 native_min_value=0,
-                native_max_value=300 if unit == UnitOfTemperature.CELSIUS else 572,
-                native_step=1,
-                native_unit_of_measurement=unit,
+                native_max_value=300,
+                native_step=0.1,
+                native_unit_of_measurement=UnitOfTemperature.CELSIUS,
                 mode=NumberMode.BOX,
             )
 
         self.entity_description = desc
+        if self.option_key == "target_temperature":
+            self._attr_suggested_display_precision = 0
         self._attr_name = entity_name_from_key(key, appliance)
 
     @property
@@ -274,8 +275,6 @@ class WhirlpoolMicrowaveNumber(WhirlpoolApkEntity, NumberEntity):
         options = microwave_local_options(self.coordinator, self.said)
         if self.option_key in options and options[self.option_key] is not None:
             value = float(options[self.option_key])
-            if self.option_key == "target_temperature":
-                return celsius_to_unit(value, self.temperature_unit)
             return value
 
         attr = {
@@ -287,7 +286,7 @@ class WhirlpoolMicrowaveNumber(WhirlpoolApkEntity, NumberEntity):
         if raw is None:
             return None
         if self.option_key == "target_temperature":
-            return celsius_to_unit(raw / 10, self.temperature_unit)
+            return raw / 10
         return raw
 
     async def async_set_native_value(self, value: float) -> None:
@@ -295,7 +294,7 @@ class WhirlpoolMicrowaveNumber(WhirlpoolApkEntity, NumberEntity):
             update_microwave_options(
                 self.coordinator,
                 self.said,
-                target_temperature=round(unit_to_celsius(float(value), self.temperature_unit) or 0, 1),
+                target_temperature=round(float(value), 1),
             )
         elif self.option_key == "cook_power":
             update_microwave_options(self.coordinator, self.said, cook_power=max(1, min(100, int(value))))
