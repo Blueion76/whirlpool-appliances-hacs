@@ -1,9 +1,7 @@
 """Select entities for cycle/control values discovered in appliance status."""
 from __future__ import annotations
 
-import asyncio
 import logging
-
 from collections.abc import Mapping
 from typing import Any
 
@@ -14,58 +12,48 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import WhirlpoolApkConfigEntry
-from .const import DOMAIN
-from .capabilities import cooking_cavity_capability
 from .api import appliance_ddm_key, appliance_said
-from .entity import WhirlpoolApkEntity, attr_value, entity_name_from_key, find_key, is_cooking_appliance, is_refrigerator_appliance, oven_cavity_exists
-from .oven_options import FROZEN_BAKE_FOOD_OPTIONS, current_oven_options, local_options, minutes_to_seconds, oven_is_active, update_local_options
+from .capabilities import cooking_cavity_capability
+from .const import DOMAIN
+from .control_helpers import (
+    CLEAN_MODE_CODE_TO_NAME,
+    CLEAN_MODE_NAME_TO_CODE,
+    DISPLAY_LANGUAGE_CODE_TO_NAME,
+    DISPLAY_LANGUAGE_NAME_TO_CODE,
+    MWO_DONENESS_CODE_TO_NAME,
+    MWO_DONENESS_NAME_TO_CODE,
+    MWO_MODE_OPTIONS,
+    MWO_PRESETS_BY_MODE,
+    TEMPERATURE_UNITS_CODE_TO_NAME,
+    TEMPERATURE_UNITS_NAME_TO_CODE,
+    TONE_VOLUME_CODE_TO_NAME,
+    TONE_VOLUME_NAME_TO_CODE,
+    frozen_or_custom_cycle,
+    microwave_local_options,
+    oven_cook_attrs,
+    oven_is_active,
+    raise_if_common_blocked,
+    update_microwave_options,
+)
+from .entity import WhirlpoolApkEntity, attr_value, entity_name_from_key, find_key, is_cooking_appliance, is_refrigerator_appliance, microwave_exists, oven_cavity_exists
 from .logging_utils import summarize
+from .oven_options import FROZEN_BAKE_FOOD_OPTIONS, current_oven_options, local_options, minutes_to_seconds, update_local_options
 
 _LOGGER = logging.getLogger(__name__)
 
 REFRIGERATOR_TEMP_MAP = {-4: "12", -2: "11", 0: "10", 3: "9", 5: "8"}
 REFRIGERATOR_TEMP_MAP_REVERSED = {value: str(key) for key, value in REFRIGERATOR_TEMP_MAP.items()}
 
-OVEN_MODE_CODE_TO_NAME = {
-    "0": "Standby",
-    "2": "Bake",
-    "6": "Convection Bake",
-    "8": "Broil",
-    "9": "Convection Broil",
-    "16": "Convection Roast",
-    "24": "Keep Warm",
-    "41": "Air Fry",
-}
+OVEN_MODE_CODE_TO_NAME = {"0": "Standby", "2": "Bake", "6": "Convection Bake", "8": "Broil", "9": "Convection Broil", "16": "Convection Roast", "24": "Keep Warm", "41": "Air Fry"}
 OVEN_MODE_NAME_TO_CODE = {name: code for code, name in OVEN_MODE_CODE_TO_NAME.items()}
-OVEN_MODE_NAME_TO_SERVICE = {
-    "Standby": "standby",
-    "Bake": "bake",
-    "Convection Bake": "convect_bake",
-    "Broil": "broil",
-    "Convection Broil": "convect_broil",
-    "Convection Roast": "convect_roast",
-    "Keep Warm": "keep_warm",
-    "Air Fry": "air_fry",
-}
+OVEN_MODE_NAME_TO_SERVICE = {"Standby": "standby", "Bake": "bake", "Convection Bake": "convect_bake", "Broil": "broil", "Convection Broil": "convect_broil", "Convection Roast": "convect_roast", "Keep Warm": "keep_warm", "Air Fry": "air_fry"}
 OVEN_MODE_OPTIONS = list(OVEN_MODE_CODE_TO_NAME.values())
-OVEN_COMPLETE_ACTION_CODE_TO_NAME = {
-    "1": "Stay On",
-    "2": "Keep Warm",
-    "3": "Turn Off",
-}
-OVEN_COMPLETE_ACTION_NAME_TO_SERVICE = {
-    "Stay On": "stay_on",
-    "Keep Warm": "keep_warm",
-    "Turn Off": "turn_off",
-}
+OVEN_COMPLETE_ACTION_CODE_TO_NAME = {"1": "Stay On", "2": "Keep Warm", "3": "Turn Off"}
+OVEN_COMPLETE_ACTION_NAME_TO_SERVICE = {"Stay On": "stay_on", "Keep Warm": "keep_warm", "Turn Off": "turn_off"}
 OVEN_COMPLETE_ACTION_CODE_TO_SERVICE = {code: OVEN_COMPLETE_ACTION_NAME_TO_SERVICE[name] for code, name in OVEN_COMPLETE_ACTION_CODE_TO_NAME.items()}
 OVEN_COMPLETE_ACTION_NAME_TO_CODE = {name: code for code, name in OVEN_COMPLETE_ACTION_CODE_TO_NAME.items()}
-LIMITED_OVEN_MODE_OPTIONS_BY_MODEL = {
-    "WOC54EC0HS00": ["Bake", "Broil", "Keep Warm"],
-}
-LIMITED_OVEN_MODE_OPTIONS_BY_DDM = {
-    "DDM_COOKING_MINERVA_COMBO_BIO5_V1": ["Bake", "Broil", "Keep Warm"],
-}
+LIMITED_OVEN_MODE_OPTIONS_BY_MODEL = {"WOC54EC0HS00": ["Bake", "Broil", "Keep Warm"]}
+LIMITED_OVEN_MODE_OPTIONS_BY_DDM = {"DDM_COOKING_MINERVA_COMBO_BIO5_V1": ["Bake", "Broil", "Keep Warm"]}
 
 
 def _appliance_field(appliance: Mapping[str, Any], *keys: str) -> str | None:
@@ -94,7 +82,6 @@ def _parsed_ddm_for_appliance(coordinator, appliance: Mapping[str, Any]) -> Mapp
         parsed = capabilities[ddm_key].get("parsed")
         if isinstance(parsed, Mapping):
             return parsed
-
     said = appliance_said(appliance)
     if said:
         for entry in capabilities.values():
@@ -109,32 +96,25 @@ def _parsed_ddm_for_appliance(coordinator, appliance: Mapping[str, Any]) -> Mapp
 
 
 def _frozen_bake_defaults(coordinator, appliance: Mapping[str, Any], cavity: str | None, food: str) -> dict[str, Any]:
-    """Return DDM default temp/minutes/complete-action for a Frozen Bake food."""
     capability = cooking_cavity_capability(_parsed_ddm_for_appliance(coordinator, appliance), cavity)
     if not isinstance(capability, Mapping):
         return {}
-
     frozen = capability.get("frozen_bake")
     food_by_name = frozen.get("food_by_name") if isinstance(frozen, Mapping) else None
     details = food_by_name.get(food) if isinstance(food_by_name, Mapping) else None
     if not isinstance(details, Mapping):
         return {}
-
     updates: dict[str, Any] = {}
     target = details.get("target_temperature")
     if isinstance(target, Mapping) and target.get("default_c") is not None:
         updates["target_temp"] = float(target["default_c"])
-
     cook_time = details.get("cook_time")
-    if isinstance(cook_time, Mapping):
-        default = cook_time.get("default")
-        if default is not None:
-            try:
-                minutes = float(default) / 60
-                updates["cook_time_minutes"] = int(minutes) if minutes.is_integer() else round(minutes, 1)
-            except (TypeError, ValueError):
-                pass
-
+    if isinstance(cook_time, Mapping) and cook_time.get("default") is not None:
+        try:
+            minutes = float(cook_time["default"]) / 60
+            updates["cook_time_minutes"] = int(minutes) if minutes.is_integer() else round(minutes, 1)
+        except (TypeError, ValueError):
+            pass
     complete = details.get("cook_time_complete_action")
     if isinstance(complete, Mapping):
         default = str(complete.get("default") or "")
@@ -144,7 +124,6 @@ def _frozen_bake_defaults(coordinator, appliance: Mapping[str, Any], cavity: str
             updates["complete_action"] = "keep_warm"
         elif default == "3":
             updates["complete_action"] = "turn_off"
-
     return updates
 
 
@@ -152,46 +131,15 @@ def _cavity_prefix(cavity: str | None) -> str:
     return "OvenLowerCavity" if cavity == "lower" else "OvenUpperCavity"
 
 
-def _target_temp_celsius(flat: Mapping[str, Any], cavity: str | None) -> float:
-    raw = attr_value(flat, f"{_cavity_prefix(cavity)}_CycleSetTargetTemp")
-    try:
-        value = int(raw) / 10
-        if value > 0:
-            return value
-    except (TypeError, ValueError):
-        pass
-    # Whirlpool legacy ovens expect Celsius. 149°C is the closest whole-Celsius
-    # equivalent to the common 300°F default.
-    return 149.0
-
-
-def _oven_is_active(flat: Mapping[str, Any], cavity: str | None) -> bool:
-    return str(attr_value(flat, f"{_cavity_prefix(cavity)}_OpStatusState") or "") in {"1", "2"}
-
-
-def _seconds_value(flat: Mapping[str, Any], attr: str) -> int | None:
-    raw = attr_value(flat, attr)
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return None
-    return value if value >= 0 else None
-
-
-def _current_oven_options(flat: Mapping[str, Any], cavity: str | None) -> dict[str, Any]:
-    prefix = _cavity_prefix(cavity)
-    mode_code = str(attr_value(flat, f"{prefix}_CycleSetCommonMode") or "")
-    mode = OVEN_MODE_NAME_TO_SERVICE.get(OVEN_MODE_CODE_TO_NAME.get(mode_code, "Bake"), "bake")
-    action_code = str(attr_value(flat, f"{prefix}_OpSetCookTimeCompleteAction") or "3")
-    return {
-        "mode": mode,
-        "target_temp": _target_temp_celsius(flat, cavity),
-        "cook_time_seconds": _seconds_value(flat, f"{prefix}_TimeSetCookTimeSet"),
-        "delay_time_seconds": _seconds_value(flat, f"{prefix}_TimeSetDelayTime"),
-        "complete_action": OVEN_COMPLETE_ACTION_CODE_TO_SERVICE.get(action_code, "turn_off"),
-    }
-
-
+async def _send_oven_options(entity: WhirlpoolApkEntity, cavity: str | None, options: Mapping[str, Any]) -> None:
+    active = oven_is_active(entity.flat_status, cavity)
+    raise_if_common_blocked(entity.flat_status, cavity=cavity)
+    if active and frozen_or_custom_cycle(entity.flat_status, cavity):
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="modify_not_allowed")
+    attrs = oven_cook_attrs(cavity=cavity, temperature=float(options["target_temp"]), mode=str(options["mode"]), cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")), delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")), complete_action=str(options["complete_action"]), operation="4" if active else "2")
+    _LOGGER.debug("Applying Whirlpool oven attrs from select entity: entity=%s said=%s cavity=%s attrs=%s", entity.entity_id, entity.said, cavity, summarize(attrs))
+    entity._check_service_request(await entity.client.send_attributes(entity.said, attrs))
+    await entity.coordinator.async_request_refresh()
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
@@ -200,20 +148,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
     for appliance in (coordinator.data or {}).get("appliances", []):
         if not appliance_said(appliance):
             continue
-        # The generic cycle selector was useful for laundry payloads that expose
-        # availableCycles/supportedCycles. Combo cooking appliances like
-        # DDM_COOKING_MINERVA_COMBO_BIO5_V1 expose oven/microwave mode attributes
-        # instead, so a generic cycle selector is misleading and cannot work.
         if is_cooking_appliance(appliance):
             flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
             if oven_cavity_exists(flat, "upper"):
-                entities.append(WhirlpoolOvenModeSelect(coordinator, appliance, "upper"))
-                entities.append(WhirlpoolOvenCompleteActionSelect(coordinator, appliance, "upper"))
-                entities.append(WhirlpoolFrozenBakePresetSelect(coordinator, appliance, "upper"))
+                entities += [WhirlpoolOvenModeSelect(coordinator, appliance, "upper"), WhirlpoolOvenCompleteActionSelect(coordinator, appliance, "upper"), WhirlpoolFrozenBakePresetSelect(coordinator, appliance, "upper"), WhirlpoolCleanModeSelect(coordinator, appliance, "upper")]
             if oven_cavity_exists(flat, "lower"):
-                entities.append(WhirlpoolOvenModeSelect(coordinator, appliance, "lower"))
-                entities.append(WhirlpoolOvenCompleteActionSelect(coordinator, appliance, "lower"))
-                entities.append(WhirlpoolFrozenBakePresetSelect(coordinator, appliance, "lower"))
+                entities += [WhirlpoolOvenModeSelect(coordinator, appliance, "lower"), WhirlpoolOvenCompleteActionSelect(coordinator, appliance, "lower"), WhirlpoolFrozenBakePresetSelect(coordinator, appliance, "lower"), WhirlpoolCleanModeSelect(coordinator, appliance, "lower")]
+            entities += [
+                WhirlpoolSimpleAttributeSelect(coordinator, appliance, "display_language", "Sys_DisplaySetLanguage", DISPLAY_LANGUAGE_NAME_TO_CODE, DISPLAY_LANGUAGE_CODE_TO_NAME, "mdi:translate"),
+                WhirlpoolSimpleAttributeSelect(coordinator, appliance, "temperature_units", "Sys_DisplaySetTempUnits", TEMPERATURE_UNITS_NAME_TO_CODE, TEMPERATURE_UNITS_CODE_TO_NAME, "mdi:thermometer-lines"),
+                WhirlpoolSimpleAttributeSelect(coordinator, appliance, "keypress_tone_volume", "Sys_OperationSetKeyPressToneVolume", TONE_VOLUME_NAME_TO_CODE, TONE_VOLUME_CODE_TO_NAME, "mdi:volume-high"),
+                WhirlpoolSimpleAttributeSelect(coordinator, appliance, "alert_tone_volume", "Sys_OperationSetAlertToneVolume", TONE_VOLUME_NAME_TO_CODE, TONE_VOLUME_CODE_TO_NAME, "mdi:bell-ring"),
+            ]
+            if microwave_exists(flat):
+                entities += [WhirlpoolMicrowaveModeSelect(coordinator, appliance), WhirlpoolMicrowavePresetSelect(coordinator, appliance), WhirlpoolMicrowaveDonenessSelect(coordinator, appliance)]
         else:
             entities.append(WhirlpoolCycleSelect(coordinator, appliance))
         if is_refrigerator_appliance(appliance):
@@ -222,10 +170,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
 
 
 class WhirlpoolOvenCompleteActionSelect(WhirlpoolApkEntity, SelectEntity):
-    """Cook-time complete action selector."""
-
     _attr_translation_key = "oven_complete_action"
-
     def __init__(self, coordinator, appliance: Mapping[str, Any], cavity: str | None) -> None:
         self.cavity = cavity
         self._attr_options = list(OVEN_COMPLETE_ACTION_CODE_TO_NAME.values())
@@ -247,43 +192,19 @@ class WhirlpoolOvenCompleteActionSelect(WhirlpoolApkEntity, SelectEntity):
         return OVEN_COMPLETE_ACTION_CODE_TO_NAME.get(str(raw), f"Action {raw}")
 
     async def async_select_option(self, option: str) -> None:
-        code = OVEN_COMPLETE_ACTION_NAME_TO_CODE.get(option)
         complete_action = OVEN_COMPLETE_ACTION_NAME_TO_SERVICE.get(option)
-        if code is None or complete_action is None:
+        if complete_action is None:
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
-
-        # Complete action is part of the full oven cycle payload. While cooking,
-        # cancel and restart with the existing options. While idle, store it
-        # locally for the Start Oven button instead of sending a partial write.
         if oven_is_active(self.flat_status, self.cavity):
             options = current_oven_options(self.coordinator, self.said, self.cavity, self.flat_status)
             options["complete_action"] = complete_action
-            _LOGGER.debug("Changing active Whirlpool oven complete action: entity=%s said=%s cavity=%s option=%s options=%s", self.entity_id, self.said, self.cavity, option, summarize(options))
-            self._check_service_request(await self.client.stop_oven_cavity(self.said, self.cavity))
-            await asyncio.sleep(1)
-            self._check_service_request(
-                await self.client.set_oven_cook(
-                    self.said,
-                    float(options["target_temp"]),
-                    str(options["mode"]),
-                    self.cavity,
-                    cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")),
-                    delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
-                    complete_action=str(options["complete_action"]),
-                )
-            )
-            await self.coordinator.async_request_refresh()
+            await _send_oven_options(self, self.cavity, options)
             return
-
-        _LOGGER.debug("Stored pending Whirlpool oven complete action: entity=%s said=%s cavity=%s option=%s", self.entity_id, self.said, self.cavity, option)
         update_local_options(self.coordinator, self.said, self.cavity, complete_action=complete_action)
         self.async_write_ha_state()
 
 
-
 class WhirlpoolOvenModeSelect(WhirlpoolApkEntity, SelectEntity):
-    """Oven cooking mode selector for Whirlpool legacy Minerva ovens."""
-
     _attr_translation_key = "oven_cook_mode"
     def __init__(self, coordinator, appliance: Mapping[str, Any], cavity: str | None) -> None:
         self.cavity = cavity
@@ -303,55 +224,28 @@ class WhirlpoolOvenModeSelect(WhirlpoolApkEntity, SelectEntity):
         if not oven_is_active(self.flat_status, self.cavity):
             return "Bake"
         raw = attr_value(self.flat_status, f"{_cavity_prefix(self.cavity)}_CycleSetCommonMode")
-        if raw is None:
-            return "Bake"
-        return OVEN_MODE_CODE_TO_NAME.get(str(raw), f"Mode {raw}")
+        return OVEN_MODE_CODE_TO_NAME.get(str(raw), f"Mode {raw}") if raw is not None else "Bake"
 
     async def async_select_option(self, option: str) -> None:
         if option not in OVEN_MODE_NAME_TO_CODE:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="invalid_value_set",
-            )
-
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
         if option == "Standby":
             self._check_service_request(await self.client.stop_oven_cavity(self.said, self.cavity))
             await self.coordinator.async_request_refresh()
             return
-
         mode = OVEN_MODE_NAME_TO_SERVICE[option]
-
         if oven_is_active(self.flat_status, self.cavity):
             options = current_oven_options(self.coordinator, self.said, self.cavity, self.flat_status)
             options["mode"] = mode
             options["frozen_food"] = None
-            _LOGGER.debug("Changing active Whirlpool oven mode: entity=%s said=%s cavity=%s option=%s options=%s", self.entity_id, self.said, self.cavity, option, summarize(options))
-            self._check_service_request(await self.client.stop_oven_cavity(self.said, self.cavity))
-            await asyncio.sleep(1)
-            self._check_service_request(
-                await self.client.set_oven_cook(
-                    self.said,
-                    float(options["target_temp"]),
-                    str(options["mode"]),
-                    self.cavity,
-                    cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")),
-                    delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
-                    complete_action=str(options["complete_action"]),
-                )
-            )
-            await self.coordinator.async_request_refresh()
+            await _send_oven_options(self, self.cavity, options)
             return
-
-        _LOGGER.debug("Stored pending Whirlpool oven mode: entity=%s said=%s cavity=%s option=%s", self.entity_id, self.said, self.cavity, option)
         update_local_options(self.coordinator, self.said, self.cavity, mode=mode, frozen_food=None)
         self.async_write_ha_state()
 
 
 class WhirlpoolFrozenBakePresetSelect(WhirlpoolApkEntity, SelectEntity):
-    """Local Frozen Bake preset selector used by the Start Oven button."""
-
     _attr_translation_key = "frozen_bake_preset"
-
     def __init__(self, coordinator, appliance: Mapping[str, Any], cavity: str | None) -> None:
         self.cavity = cavity
         self._attr_options = FROZEN_BAKE_FOOD_OPTIONS
@@ -367,33 +261,139 @@ class WhirlpoolFrozenBakePresetSelect(WhirlpoolApkEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         if option not in FROZEN_BAKE_FOOD_OPTIONS:
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
-
+        if oven_is_active(self.flat_status, self.cavity):
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="modify_not_allowed")
         if option == "None":
-            _LOGGER.debug("Cleared pending Whirlpool Frozen Bake preset: entity=%s said=%s cavity=%s", self.entity_id, self.said, self.cavity)
             update_local_options(self.coordinator, self.said, self.cavity, frozen_food=None)
         else:
             food = option.lower().replace(" ", "_")
             updates = _frozen_bake_defaults(self.coordinator, self.appliance, self.cavity, food)
-            _LOGGER.debug("Stored pending Whirlpool Frozen Bake preset: entity=%s said=%s cavity=%s option=%s defaults=%s", self.entity_id, self.said, self.cavity, option, summarize(updates))
-            update_local_options(
-                self.coordinator,
-                self.said,
-                self.cavity,
-                frozen_food=food,
-                **updates,
-            )
-
-        # Notify the related number/select entities so the default temperature,
-        # cook time, and complete action display immediately after choosing a preset.
+            update_local_options(self.coordinator, self.said, self.cavity, frozen_food=food, **updates)
         self.coordinator.async_update_listeners()
         self.async_write_ha_state()
 
+
+class WhirlpoolCleanModeSelect(WhirlpoolApkEntity, SelectEntity):
+    _attr_translation_key = "oven_clean_mode"
+    _attr_icon = "mdi:spray-bottle"
+    def __init__(self, coordinator, appliance: Mapping[str, Any], cavity: str | None) -> None:
+        self.cavity = cavity
+        self._attr_options = ["None", "Standard", "Mid", "Low", "Steam"]
+        suffix = f"{cavity}_oven_clean_mode" if cavity else "oven_clean_mode"
+        super().__init__(coordinator, appliance, suffix)
+        self._attr_name = entity_name_from_key(suffix, appliance)
+
+    @property
+    def current_option(self) -> str | None:
+        raw = attr_value(self.flat_status, f"{_cavity_prefix(self.cavity)}_CycleSetCleanOvenMode")
+        return CLEAN_MODE_CODE_TO_NAME.get(str(raw or "0"), "None")
+
+    async def async_select_option(self, option: str) -> None:
+        code = CLEAN_MODE_NAME_TO_CODE.get(option)
+        if code is None:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
+        raise_if_common_blocked(self.flat_status, cavity=self.cavity)
+        if oven_is_active(self.flat_status, self.cavity):
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="oven_active")
+        self._check_service_request(await self.client.send_attributes(self.said, {f"{_cavity_prefix(self.cavity)}_CycleSetCleanOvenMode": code}))
+        await self.coordinator.async_request_refresh()
+
+
+class WhirlpoolSimpleAttributeSelect(WhirlpoolApkEntity, SelectEntity):
+    def __init__(self, coordinator, appliance: Mapping[str, Any], key: str, attr: str, name_to_code: Mapping[str, str], code_to_name: Mapping[str, str], icon: str | None = None) -> None:
+        self.attr = attr
+        self.name_to_code = dict(name_to_code)
+        self.code_to_name = dict(code_to_name)
+        self._attr_options = list(name_to_code)
+        self._attr_icon = icon
+        super().__init__(coordinator, appliance, key)
+        self._attr_translation_key = key
+        self._attr_name = entity_name_from_key(key, appliance)
+
+    @property
+    def current_option(self) -> str | None:
+        raw = attr_value(self.flat_status, self.attr)
+        return self.code_to_name.get(str(raw), self._attr_options[0] if self._attr_options else None)
+
+    async def async_select_option(self, option: str) -> None:
+        code = self.name_to_code.get(option)
+        if code is None:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
+        raise_if_common_blocked(self.flat_status)
+        self._check_service_request(await self.client.send_attributes(self.said, {self.attr: code}))
+        await self.coordinator.async_request_refresh()
+
+
+class WhirlpoolMicrowaveModeSelect(WhirlpoolApkEntity, SelectEntity):
+    _attr_translation_key = "microwave_mode"
+    _attr_icon = "mdi:microwave"
+    def __init__(self, coordinator, appliance: Mapping[str, Any]) -> None:
+        self._attr_options = MWO_MODE_OPTIONS
+        super().__init__(coordinator, appliance, "microwave_mode")
+        self._attr_name = entity_name_from_key("microwave_mode", appliance)
+
+    @property
+    def current_option(self) -> str | None:
+        return str(microwave_local_options(self.coordinator, self.said).get("mode") or "Cook")
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in MWO_MODE_OPTIONS:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
+        first_preset = next(iter(MWO_PRESETS_BY_MODE.get(option, {"Manual": "1"})))
+        update_microwave_options(self.coordinator, self.said, mode=option, preset=first_preset)
+        self.coordinator.async_update_listeners()
+        self.async_write_ha_state()
+
+
+class WhirlpoolMicrowavePresetSelect(WhirlpoolApkEntity, SelectEntity):
+    _attr_translation_key = "microwave_preset"
+    _attr_icon = "mdi:format-list-bulleted"
+    def __init__(self, coordinator, appliance: Mapping[str, Any]) -> None:
+        super().__init__(coordinator, appliance, "microwave_preset")
+        self._attr_name = entity_name_from_key("microwave_preset", appliance)
+
+    @property
+    def options(self) -> list[str]:
+        mode = str(microwave_local_options(self.coordinator, self.said).get("mode") or "Cook")
+        return list(MWO_PRESETS_BY_MODE.get(mode, {"Manual": "1"}))
+
+    @property
+    def current_option(self) -> str | None:
+        option = str(microwave_local_options(self.coordinator, self.said).get("preset") or "")
+        return option if option in self.options else (self.options[0] if self.options else None)
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in self.options:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
+        update_microwave_options(self.coordinator, self.said, preset=option)
+        self.async_write_ha_state()
+
+
+class WhirlpoolMicrowaveDonenessSelect(WhirlpoolApkEntity, SelectEntity):
+    _attr_translation_key = "microwave_doneness"
+    _attr_icon = "mdi:tune"
+    def __init__(self, coordinator, appliance: Mapping[str, Any]) -> None:
+        self._attr_options = list(MWO_DONENESS_NAME_TO_CODE)
+        super().__init__(coordinator, appliance, "microwave_doneness")
+        self._attr_name = entity_name_from_key("microwave_doneness", appliance)
+
+    @property
+    def current_option(self) -> str | None:
+        local = microwave_local_options(self.coordinator, self.said).get("doneness")
+        if local:
+            return str(local)
+        return MWO_DONENESS_CODE_TO_NAME.get(str(attr_value(self.flat_status, "Mwo_CycleSetDoneness") or "0"), "Default")
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in MWO_DONENESS_NAME_TO_CODE:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
+        update_microwave_options(self.coordinator, self.said, doneness=option)
+        self.async_write_ha_state()
 
 
 class WhirlpoolCycleSelect(WhirlpoolApkEntity, SelectEntity):
     _attr_translation_key = "cycle_select"
     _attr_entity_registry_enabled_default = False
-
     def __init__(self, coordinator, appliance: Mapping[str, Any]) -> None:
         super().__init__(coordinator, appliance, "cycle_select")
         self._attr_name = entity_name_from_key("cycle_select", appliance)
@@ -428,12 +428,9 @@ class WhirlpoolCycleSelect(WhirlpoolApkEntity, SelectEntity):
 
 
 class WhirlpoolRefrigeratorTemperatureSelect(WhirlpoolApkEntity, SelectEntity):
-    """Official Whirlpool refrigerator temperature-level select."""
-
     _attr_translation_key = "refrigerator_temperature_level"
     _attr_options = [str(option) for option in REFRIGERATOR_TEMP_MAP]
     _attr_unit_of_measurement = UnitOfTemperature.CELSIUS
-
     def __init__(self, coordinator, appliance: Mapping[str, Any]) -> None:
         super().__init__(coordinator, appliance, "refrigerator_temperature_level")
         self._attr_name = entity_name_from_key("refrigerator_temperature_level")
@@ -441,17 +438,12 @@ class WhirlpoolRefrigeratorTemperatureSelect(WhirlpoolApkEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         raw = attr_value(self.flat_status, "Refrigerator_OpSetTempPreset")
-        if raw is None:
-            return None
-        return REFRIGERATOR_TEMP_MAP_REVERSED.get(str(raw), str(raw))
+        return REFRIGERATOR_TEMP_MAP_REVERSED.get(str(raw), str(raw)) if raw is not None else None
 
     async def async_select_option(self, option: str) -> None:
         try:
             mapped = REFRIGERATOR_TEMP_MAP[int(option)]
         except (KeyError, ValueError) as err:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="invalid_value_set",
-            ) from err
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set") from err
         self._check_service_request(await self.client.send_attributes(self.said, {"Refrigerator_OpSetTempPreset": mapped}))
         await self.coordinator.async_request_refresh()
