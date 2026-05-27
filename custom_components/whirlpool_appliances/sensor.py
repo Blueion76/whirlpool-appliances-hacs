@@ -38,6 +38,7 @@ class WhirlpoolApkSensorDescription(SensorEntityDescription):
     aircon_only: bool = False
     dishwasher_only: bool = False
     cooktop_only: bool = False
+    hood_only: bool = False
 
 
 def _by_keys(*keys: str) -> Callable[[Mapping[str, Any]], Any | None]:
@@ -262,6 +263,20 @@ def _hood_value(flat: Mapping[str, Any], *names: str) -> Any | None:
 
 
 
+def _has_hood_status(flat: Mapping[str, Any]) -> bool:
+    """Return true only when this appliance status actually exposes hood/vent fields."""
+    return any(
+        _hood_value(flat, *names) not in (None, "")
+        for names in (
+            ("fanSpeed", "hoodFan", "hoodFanSpeed", "fanLevel"),
+            ("hoodLight", "light", "lightOn", "HoodLight"),
+            ("hoodLightColor", "lightColor", "color"),
+            ("hoodState", "ventilationState"),
+        )
+    )
+
+
+
 SENSOR_DESCRIPTIONS: tuple[WhirlpoolApkSensorDescription, ...] = (
     WhirlpoolApkSensorDescription(key="state", translation_key="state", device_class=SensorDeviceClass.ENUM, value_fn=_mapped_key(MACHINE_STATE, "state", "machineState", "applianceState")),
     WhirlpoolApkSensorDescription(key="cycle", translation_key="cycle", value_fn=_by_keys("cycle", "cycleName", "currentCycle", "cycleLabel")),
@@ -284,9 +299,9 @@ SENSOR_DESCRIPTIONS: tuple[WhirlpoolApkSensorDescription, ...] = (
     WhirlpoolApkSensorDescription(key="ac_mode", translation_key="ac_mode", icon="mdi:air-conditioner", device_class=SensorDeviceClass.ENUM, options=list(AC_MODE.values()), value_fn=_mapped_key(AC_MODE, "ac.mode", "mode", "operationMode", "airconMode"), aircon_only=True),
     WhirlpoolApkSensorDescription(key="ac_fan_speed", translation_key="ac_fan_speed", icon="mdi:fan", value_fn=_by_keys("fanSpeed", "fan_speed", "ac.fanSpeed", "airconFanSpeed"), aircon_only=True),
     WhirlpoolApkSensorDescription(key="cooktop_state", translation_key="cooktop_state", icon="mdi:stove", value_fn=_by_keys("cooktopState", "cooktop.state", "machineState", "applianceState"), cooktop_only=True),
-    WhirlpoolApkSensorDescription(key="hood_fan_speed", translation_key="hood_fan_speed", icon="mdi:fan", value_fn=lambda flat: _hood_value(flat, "fanSpeed", "hoodFan", "hoodFanSpeed", "fanLevel"), cooking_only=True),
-    WhirlpoolApkSensorDescription(key="hood_light", translation_key="hood_light", icon="mdi:lightbulb", value_fn=lambda flat: _hood_value(flat, "hoodLight", "light", "lightOn", "HoodLight"), cooking_only=True),
-    WhirlpoolApkSensorDescription(key="hood_light_color", translation_key="hood_light_color", icon="mdi:palette", value_fn=lambda flat: _hood_value(flat, "hoodLightColor", "lightColor", "color"), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="hood_fan_speed", translation_key="hood_fan_speed", icon="mdi:fan", value_fn=lambda flat: _hood_value(flat, "fanSpeed", "hoodFan", "hoodFanSpeed", "fanLevel"), hood_only=True),
+    WhirlpoolApkSensorDescription(key="hood_light", translation_key="hood_light", icon="mdi:lightbulb", value_fn=lambda flat: _hood_value(flat, "hoodLight", "light", "lightOn", "HoodLight"), hood_only=True),
+    WhirlpoolApkSensorDescription(key="hood_light_color", translation_key="hood_light_color", icon="mdi:palette", value_fn=lambda flat: _hood_value(flat, "hoodLightColor", "lightColor", "color"), hood_only=True),
     WhirlpoolApkSensorDescription(key="cooktop_zone_1_state", translation_key="cooktop_zone_1_state", icon="mdi:stove", value_fn=lambda flat, zone=1: _cooktop_zone_value(flat, zone, "state", "zoneState", "status"), cooktop_only=True),
     WhirlpoolApkSensorDescription(key="cooktop_zone_1_power", translation_key="cooktop_zone_1_power", icon="mdi:lightning-bolt", value_fn=lambda flat, zone=1: _cooktop_zone_value(flat, zone, "power", "powerLevel", "powerlevel", "level"), cooktop_only=True),
     WhirlpoolApkSensorDescription(key="cooktop_zone_1_temperature", translation_key="cooktop_zone_1_temperature", icon="mdi:thermometer", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=lambda flat, zone=1: _temperature_value(flat, f"zone1.temperature", f"cooktop.zone1.temperature", f"cooktopZone1.temperature"), cooktop_only=True),
@@ -347,6 +362,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
         aircon = is_aircon_appliance(appliance)
         dishwasher = is_dishwasher_appliance(appliance)
         cooktop = is_cooktop_appliance(appliance)
+        has_hood = _has_hood_status(flat)
         for desc in SENSOR_DESCRIPTIONS:
             if desc.cooking_only and not cooking:
                 continue
@@ -359,6 +375,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
             if desc.dishwasher_only and not dishwasher:
                 continue
             if desc.cooktop_only and not cooktop:
+                continue
+            if desc.hood_only and not has_hood:
                 continue
             if (laundry or dishwasher) and desc.key in {"state", "cycle", "phase", "time_remaining", "end_time"}:
                 continue
