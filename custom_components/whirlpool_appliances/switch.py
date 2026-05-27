@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import WhirlpoolApkConfigEntry
 from .api import appliance_said
-from .control_helpers import raise_if_common_blocked
+from .helpers.control import raise_if_common_blocked
 from .entity import WhirlpoolApkEntity, attr_value, entity_name_from_key, find_key, is_aircon_appliance, is_cooking_appliance, microwave_exists
 
 

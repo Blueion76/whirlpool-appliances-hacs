@@ -11,9 +11,9 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import WhirlpoolApkConfigEntry
 from .api import appliance_ddm_key, appliance_said
-from .capabilities import cooking_cavity_capability
+from .helpers.capabilities import cooking_cavity_capability
 from .const import DOMAIN
-from .control_helpers import (
+from .helpers.control import (
     CLEAN_MODE_CODE_TO_NAME,
     CLEAN_MODE_NAME_TO_CODE,
     DISPLAY_LANGUAGE_CODE_TO_NAME,
@@ -34,8 +34,8 @@ from .control_helpers import (
     update_microwave_options,
 )
 from .entity import WhirlpoolApkEntity, attr_value, entity_name_from_key, find_key, is_cooking_appliance, is_refrigerator_appliance, microwave_exists, oven_cavity_exists
-from .logging_utils import summarize
-from .oven_options import current_oven_options, local_options, minutes_to_seconds, update_local_options
+from .helpers.logging import summarize
+from .helpers.oven_options import current_oven_options, local_options, minutes_to_seconds, update_local_options
 
 OVEN_MODE_CODE_TO_NAME = {"0": "Standby", "2": "Bake", "6": "Convection Bake", "8": "Broil", "9": "Convection Broil", "16": "Convection Roast", "24": "Keep Warm", "41": "Air Fry"}
 OVEN_MODE_NAME_TO_SERVICE = {"Standby": "standby", "Bake": "bake", "Convection Bake": "convect_bake", "Broil": "broil", "Convection Broil": "convect_broil", "Convection Roast": "convect_roast", "Keep Warm": "keep_warm", "Air Fry": "air_fry"}

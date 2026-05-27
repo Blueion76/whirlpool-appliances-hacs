@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .api import appliance_ddm_key, appliance_name, appliance_said
 from .const import DOMAIN
 from .coordinator import WhirlpoolApkCoordinator
-from .logging_utils import summarize
+from .helpers.logging import summarize
 
 _LOGGER = logging.getLogger(__name__)
 

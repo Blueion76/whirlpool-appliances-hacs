@@ -8,83 +8,85 @@ call_api:
       example: GET
       selector:
         select:
-          options: [GET, POST, PUT, PATCH, DELETE]
+          options:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
     path:
       name: Path
       required: true
       example: /api/v1/appliance/status/SAID_HERE
       selector:
-        text:
+        text: null
     body:
       name: Body
       required: false
       selector:
-        object:
+        object: null
     params:
       name: Query parameters
       required: false
       selector:
-        object:
+        object: null
     auth:
       name: Send Authorization header
       description: Turn off for endpoints that reject the normal OAuth Authorization header.
       required: false
       default: true
       selector:
-        boolean:
-
+        boolean: null
 send_appliance_command:
   name: Send appliance command
   description: Send a command through /api/v1/appliance/command.
   fields:
-    appliance_device: &appliance_device_field
+    appliance_device: &id001
       name: Appliance device
       description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
       required: false
       selector:
         device:
           integration: whirlpool_appliances
-    said: &said_field
+    said: &id002
       name: SAID
       description: Optional manual SAID override. Not needed if appliance device is selected.
       required: false
       selector:
-        text:
+        text: null
     command:
       name: Command
       required: false
       example: setAttributes
       selector:
-        text:
+        text: null
     attributes:
       name: Attributes
       required: false
       selector:
-        object:
+        object: null
     raw:
       name: Raw payload
       required: false
       selector:
-        object:
-
+        object: null
 set_cavity_light:
   name: Set cavity light
   description: Turn an oven or microwave cavity light on or off.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     enabled:
       name: Enabled
       required: true
       selector:
-        boolean:
+        boolean: null
     cavity:
       name: Cavity
       required: false
       example: upper
       selector:
-        text:
-
+        text: null
 appliance_function:
   name: Appliance function
   description: Call a named appliance helper function from api_spec.py.
@@ -93,65 +95,60 @@ appliance_function:
       name: Function
       required: true
       selector:
-        text:
-    appliance_device: *appliance_device_field
-    said: *said_field
+        text: null
+    appliance_device: *id001
+    said: *id002
     body:
       name: Body
       required: false
       selector:
-        object:
+        object: null
     path_values:
       name: Path values
       required: false
       selector:
-        object:
-
+        object: null
 refresh:
   name: Refresh Whirlpool data
   description: Refresh appliance list and status data now.
-
 refresh_ddm_capabilities:
   name: Refresh DDM capabilities
   description: Refresh Whirlpool Device Data Model capabilities and diagnostic errors.
-
 publish_thing_command:
   name: Publish ThingShield MQTT command
   description: Publish a command to a ThingShield appliance over AWS IoT MQTT.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     command:
       name: Command
       required: false
       default: getState
       example: getState
       selector:
-        text:
+        text: null
     payload:
       name: Payload
       required: false
       selector:
-        object:
-
+        object: null
 set_attributes:
   name: Set legacy appliance attributes
   description: Set raw legacy SAID attributes through /api/v1/appliance/command.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     attributes:
       name: Attributes
       required: true
       selector:
-        object:
-
+        object: null
 set_oven_cook:
   name: Start oven cook cycle
   description: Start or modify a Whirlpool legacy oven cavity cook cycle.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     temperature:
       name: Temperature
       description: Target temperature in Celsius.
@@ -169,16 +166,16 @@ set_oven_cook:
       selector:
         select:
           options:
-            - bake
-            - convect_bake
-            - convolution_bake
-            - broil
-            - convect_broil
-            - convection_broil
-            - convect_roast
-            - convection_roast
-            - keep_warm
-            - air_fry
+          - bake
+          - convect_bake
+          - convolution_bake
+          - broil
+          - convect_broil
+          - convection_broil
+          - convect_roast
+          - convection_roast
+          - keep_warm
+          - air_fry
     cook_time_minutes:
       name: Cook time
       required: false
@@ -204,9 +201,9 @@ set_oven_cook:
       selector:
         select:
           options:
-            - turn_off
-            - keep_warm
-            - stay_on
+          - turn_off
+          - keep_warm
+          - stay_on
     cavity:
       name: Cavity
       required: false
@@ -214,27 +211,26 @@ set_oven_cook:
       selector:
         select:
           options:
-            - upper
-            - lower
-
+          - upper
+          - lower
 set_oven_frozen_bake:
   name: Start Frozen Bake
   description: Start a Whirlpool Frozen Bake automatic oven cycle.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     food:
       name: Food
       required: true
       selector:
         select:
           options:
-            - pizza
-            - pie
-            - meals
-            - fries
-            - nuggets
-            - lasagna
+          - pizza
+          - pie
+          - meals
+          - fries
+          - nuggets
+          - lasagna
     temperature:
       name: Temperature
       required: true
@@ -260,9 +256,9 @@ set_oven_frozen_bake:
       selector:
         select:
           options:
-            - turn_off
-            - keep_warm
-            - stay_on
+          - turn_off
+          - keep_warm
+          - stay_on
     cavity:
       name: Cavity
       required: false
@@ -270,15 +266,14 @@ set_oven_frozen_bake:
       selector:
         select:
           options:
-            - upper
-            - lower
-
+          - upper
+          - lower
 stop_oven_cavity:
   name: Stop oven cavity
   description: Cancel a Whirlpool legacy oven cavity cook cycle.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     cavity:
       name: Cavity
       required: false
@@ -286,66 +281,61 @@ stop_oven_cavity:
       selector:
         select:
           options:
-            - upper
-            - lower
-
+          - upper
+          - lower
 stop_microwave:
   name: Stop microwave
   description: Cancel a Whirlpool legacy microwave operation.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
-
+    appliance_device: *id001
+    said: *id002
 sync_time:
   name: Sync appliance time
   description: Sync appliance time with the Whirlpool cloud time endpoint.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     timezone:
       name: Time zone
       required: false
       example: America/Chicago
       selector:
-        text:
-
+        text: null
 set_timezone:
   name: Set appliance time zone
   description: Write the appliance time zone attributes.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     timezone:
       name: Time zone
       required: true
       example: America/Chicago
       selector:
-        text:
-
+        text: null
 set_time_auto_update:
   name: Set time auto update
   description: Turn Whirlpool automatic time update on or off.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     enabled:
       name: Enabled
       required: true
       selector:
-        boolean:
+        boolean: null
     timezone:
       name: Time zone
       required: false
       example: America/Chicago
       selector:
-        text:
-
+        text: null
 set_kitchen_timer:
   name: Set kitchen timer
   description: Set and start the appliance on-screen kitchen timer.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     seconds:
       name: Seconds
       required: true
@@ -365,13 +355,12 @@ set_kitchen_timer:
           min: 1
           max: 9
           step: 1
-
 stop_kitchen_timer:
   name: Stop kitchen timer
   description: Stop or cancel the appliance on-screen kitchen timer.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     timer:
       name: Timer
       required: false
@@ -381,34 +370,31 @@ stop_kitchen_timer:
           min: 1
           max: 9
           step: 1
-
 check_firmware_update:
   name: Check firmware update
   description: Check Whirlpool cloud for firmware update availability.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
-
+    appliance_device: *id001
+    said: *id002
 set_quiet_mode:
   name: Set quiet mode
   description: Turn Whirlpool quiet mode on or off.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     enabled:
       name: Enabled
       required: true
       selector:
-        boolean:
-
+        boolean: null
 set_remote_enable:
   name: Set remote enable
   description: Attempt to turn Whirlpool remote enable on or off.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     enabled:
       name: Enabled
       required: true
       selector:
-        boolean:
+        boolean: null

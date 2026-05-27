@@ -14,7 +14,7 @@ from typing import Any
 
 from aiohttp import ClientError, ClientResponse, ClientSession
 
-from .logging_utils import summarize, summarize_keys
+from .helpers.logging import summarize, summarize_keys
 
 from .const import (
     AWS_REGIONS,

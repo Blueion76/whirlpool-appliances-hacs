@@ -19,7 +19,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import WhirlpoolApkConfigEntry
 from .api import appliance_ddm_key, appliance_said
-from .capabilities import cooking_cavity_capability
+from .helpers.capabilities import cooking_cavity_capability
 from .const import DOMAIN
 from .entity import (
     WhirlpoolApkEntity,

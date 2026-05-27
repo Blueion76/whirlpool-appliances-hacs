@@ -14,10 +14,10 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import WhirlpoolApkConfigEntry
 from .api import appliance_said
 from .const import DOMAIN
-from .control_helpers import frozen_or_custom_cycle, microwave_local_options, oven_cook_attrs, oven_is_active, raise_if_common_blocked, update_microwave_options
+from .helpers.control import frozen_or_custom_cycle, microwave_local_options, oven_cook_attrs, oven_is_active, raise_if_common_blocked, update_microwave_options
 from .entity import WhirlpoolApkEntity, attr_value, celsius_to_unit, entity_name_from_key, find_key, is_cooking_appliance, microwave_exists, oven_cavity_exists, unit_to_celsius
-from .logging_utils import summarize
-from .oven_options import current_oven_options, local_options, minutes_to_seconds, update_local_options
+from .helpers.logging import summarize
+from .helpers.oven_options import current_oven_options, local_options, minutes_to_seconds, update_local_options
 
 _LOGGER = logging.getLogger(__name__)
 

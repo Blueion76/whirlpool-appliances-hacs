@@ -10,8 +10,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import WhirlpoolApiError, WhirlpoolCloudClient, appliance_ddm_key, appliance_said
 from .api_mqtt import WhirlpoolThingShieldManager
-from .capabilities import parse_ddm_capabilities
-from .logging_utils import summarize, summarize_keys
+from .helpers.capabilities import parse_ddm_capabilities
+from .helpers.logging import summarize, summarize_keys
 
 _LOGGER = logging.getLogger(__name__)
 
