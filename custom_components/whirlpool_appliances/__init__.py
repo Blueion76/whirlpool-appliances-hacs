@@ -10,15 +10,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_REGION, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
-from homeassistant.helpers import device_registry as dr, selector
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import WhirlpoolAccountLockedError, WhirlpoolApiError, WhirlpoolAuthError, WhirlpoolCloudClient
-from .api_spec import APPLIANCE_FUNCTIONS, DISCOVERED_API_PATHS
+from .api_spec import APPLIANCE_FUNCTIONS
 from .const import (
     CONF_BRAND,
-    CONF_ENABLE_CONTROL_ENTITIES,
-    CONF_EXPOSE_RAW_SENSORS,
     CONF_SCAN_INTERVAL,
     DATA_CLIENT,
     DATA_COORDINATOR,
@@ -69,15 +67,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry)
     except WhirlpoolApiError as err:
         raise ConfigEntryNotReady(translation_domain=DOMAIN, translation_key="cannot_connect") from err
 
-    coordinator = WhirlpoolApkCoordinator(hass, client, entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+    scan_interval = _entry_option(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    coordinator = WhirlpoolApkCoordinator(hass, client, scan_interval)
     _LOGGER.debug(
         "Setting up Whirlpool Appliances entry: entry_id=%s region=%s brand=%s scan_interval=%s",
         entry.entry_id,
         entry.data.get(CONF_REGION, DEFAULT_REGION),
         entry.data.get(CONF_BRAND, DEFAULT_BRAND),
-        entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+        scan_interval,
     )
     entry.runtime_data = coordinator
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await coordinator.async_config_entry_first_refresh()
     if not (coordinator.data or {}).get("appliances"):
         _LOGGER.warning("Whirlpool setup did not find any appliances")
@@ -95,8 +95,22 @@ async def async_unload_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         await entry.runtime_data.async_shutdown()
-        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+        entries = hass.data.get(DOMAIN, {})
+        entries.pop(entry.entry_id, None)
+        if not entries:
+            hass.data.pop(DOMAIN, None)
+            _unregister_services(hass)
     return unload_ok
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry) -> None:
+    """Reload config entry when options are updated."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+def _entry_option(entry: ConfigEntry, key: str, default: Any) -> Any:
+    """Read option value with fallback to config entry data."""
+    return entry.options.get(key, entry.data.get(key, default))
 
 
 def _first_client(hass: HomeAssistant) -> WhirlpoolCloudClient:
@@ -506,3 +520,30 @@ def _register_services(hass: HomeAssistant) -> None:
         schema=vol.Schema({vol.Required("function"): vol.In(list(APPLIANCE_FUNCTIONS)), vol.Optional("appliance_device"): str, vol.Optional("said"): str, vol.Optional("body"): object, vol.Optional("path_values"): object}),
         supports_response=SupportsResponse.OPTIONAL,
     )
+
+
+def _unregister_services(hass: HomeAssistant) -> None:
+    """Remove Whirlpool services when the last entry unloads."""
+    for service in (
+        "call_api",
+        "send_appliance_command",
+        "set_cavity_light",
+        "publish_thing_command",
+        "set_attributes",
+        "set_oven_cook",
+        "set_oven_frozen_bake",
+        "stop_oven_cavity",
+        "stop_microwave",
+        "set_quiet_mode",
+        "set_remote_enable",
+        "set_kitchen_timer",
+        "stop_kitchen_timer",
+        "check_firmware_update",
+        "sync_time",
+        "set_time_auto_update",
+        "refresh",
+        "refresh_ddm_capabilities",
+        "appliance_function",
+    ):
+        if hass.services.has_service(DOMAIN, service):
+            hass.services.async_remove(DOMAIN, service)

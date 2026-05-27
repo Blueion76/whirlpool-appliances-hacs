@@ -15,7 +15,6 @@
       "user": {
         "data": {
           "brand": "Brand",
-          "enable_control_entities": "Enable control entities",
           "expose_raw_sensors": "Expose raw diagnostic sensors",
           "password": "Password",
           "region": "Region",
@@ -32,6 +31,17 @@
         },
         "description": "Re-enter the Whirlpool account password.",
         "title": "Reauthenticate Whirlpool Appliances"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "expose_raw_sensors": "Expose raw diagnostic sensors",
+          "scan_interval": "Scan interval seconds"
+        },
+        "title": "Whirlpool Appliances options"
       }
     }
   },

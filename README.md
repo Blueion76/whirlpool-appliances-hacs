@@ -35,6 +35,8 @@ This build intentionally removed the extra guessed APK login endpoints and uses 
 3. Add integration: **Settings → Devices & services → Add integration → Whirlpool Appliances**.
 4. Use your Whirlpool app account credentials.
 
+You can adjust polling/diagnostic options later from **Settings → Devices & services → Whirlpool Appliances → Configure**.
+
 ## Important limitations
 
 This was derived from a static APK inspection, not from a live Whirlpool account session. Whirlpool uses obfuscated mobile code, changing DTO payloads, legacy REST/STOMP for older `SAID` devices, and AWS IoT MQTT for newer `TS_SAID` devices. The integration is therefore intentionally data-driven: it exposes all discovered API paths and robust raw-status entities, but some command payloads may require adjustment from Home Assistant logs for your exact appliance model.
@@ -82,3 +84,20 @@ See `docs/API_FINDINGS.md` for the extracted API map.
 This integration is unofficial and is not affiliated with Whirlpool Corporation.
 
 Use remote appliance controls carefully. Starting ovens, microwaves, or cooking appliances remotely can create safety risks. Make sure the appliance is empty/safe to operate before sending commands.
+
+## Development
+
+This repository includes basic checks used in CI:
+
+- `ruff format --check .`
+- `ruff check .`
+- Home Assistant `hassfest`
+
+Ruff is currently scoped to the integration's config flow file in `pyproject.toml` as an incremental baseline for this repository.
+
+Optional local hooks:
+
+```bash
+pip install pre-commit
+pre-commit install
+```

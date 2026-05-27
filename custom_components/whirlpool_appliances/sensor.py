@@ -868,7 +868,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
             if desc.key.startswith("lower_") and not oven_cavity_exists(flat, "lower"):
                 continue
             entities.append(WhirlpoolApkSensor(coordinator, appliance, desc))
-        if entry.data.get(CONF_EXPOSE_RAW_SENSORS, True):
+        if entry.options.get(CONF_EXPOSE_RAW_SENSORS, entry.data.get(CONF_EXPOSE_RAW_SENSORS, True)):
             entities.append(WhirlpoolRawStatusSensor(coordinator, appliance))
     async_add_entities(entities)
 

@@ -7,9 +7,11 @@
   "issue_tracker": "https://github.com/Blueion76/whirlpool-appliances-hacs/issues",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
+  "homeassistant": "2026.5.0",
+  "loggers": ["awsiot", "awscrt"],
   "requirements": [
     "boto3>=1.34.0",
     "awsiotsdk>=1.22.0"
   ],
-  "version": "2.3.0"
+  "version": "2.4.0"
 }

@@ -1,4 +1,5 @@
 """Config flow for Whirlpool Appliances integration."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -11,10 +12,14 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_REGION, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import WhirlpoolAccountLockedError, WhirlpoolApiError, WhirlpoolAuthError, WhirlpoolCloudClient
+from .api import (
+    WhirlpoolAccountLockedError,
+    WhirlpoolApiError,
+    WhirlpoolAuthError,
+    WhirlpoolCloudClient,
+)
 from .const import (
     CONF_BRAND,
-    CONF_ENABLE_CONTROL_ENTITIES,
     CONF_EXPOSE_RAW_SENSORS,
     CONF_SCAN_INTERVAL,
     DEFAULT_BRAND,
@@ -26,7 +31,9 @@ from .const import (
 )
 
 
-async def _validate_login(hass, data: dict[str, Any], *, check_appliances_exist: bool) -> str | None:
+async def _validate_login(
+    hass, data: dict[str, Any], *, check_appliances_exist: bool
+) -> str | None:
     """Validate credentials using the same high-level behavior as official HA Whirlpool.
 
     The official integration authenticates first, then only treats appliance discovery
@@ -60,6 +67,13 @@ class WhirlpoolApkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    @staticmethod
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> WhirlpoolApkOptionsFlow:
+        """Get options flow."""
+        return WhirlpoolApkOptionsFlow(config_entry)
+
     async def async_step_reauth(self, entry_data: Mapping[str, Any]):
         """Handle re-authentication."""
         return await self.async_step_reauth_confirm()
@@ -69,36 +83,94 @@ class WhirlpoolApkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         reauth_entry = self._get_reauth_entry()
         if user_input is not None:
-            data = {**reauth_entry.data, CONF_PASSWORD: user_input[CONF_PASSWORD], CONF_BRAND: user_input[CONF_BRAND]}
+            data = {
+                **reauth_entry.data,
+                CONF_PASSWORD: user_input[CONF_PASSWORD],
+                CONF_BRAND: user_input[CONF_BRAND],
+            }
             error = await _validate_login(self.hass, data, check_appliances_exist=False)
             if error is None:
                 return self.async_update_reload_and_abort(reauth_entry, data=data)
             errors["base"] = error
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema({vol.Required(CONF_PASSWORD): str, vol.Required(CONF_BRAND, default=reauth_entry.data.get(CONF_BRAND, DEFAULT_BRAND)): vol.In(SUPPORTED_BRANDS)}),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_PASSWORD): str,
+                    vol.Required(
+                        CONF_BRAND,
+                        default=reauth_entry.data.get(CONF_BRAND, DEFAULT_BRAND),
+                    ): vol.In(SUPPORTED_BRANDS),
+                }
+            ),
             errors=errors,
         )
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
         if user_input is not None:
-            error = await _validate_login(self.hass, user_input, check_appliances_exist=True)
+            user_input[CONF_USERNAME] = user_input[CONF_USERNAME].strip()
+            error = await _validate_login(
+                self.hass, user_input, check_appliances_exist=True
+            )
             if error is None:
-                await self.async_set_unique_id(user_input[CONF_USERNAME].lower(), raise_on_progress=False)
+                await self.async_set_unique_id(
+                    user_input[CONF_USERNAME].lower(), raise_on_progress=False
+                )
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=user_input[CONF_USERNAME], data=user_input)
+                return self.async_create_entry(
+                    title=user_input[CONF_USERNAME], data=user_input
+                )
             errors["base"] = error
 
         schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME): str,
                 vol.Required(CONF_PASSWORD): str,
-                vol.Required(CONF_REGION, default=DEFAULT_REGION): vol.In(SUPPORTED_REGIONS),
-                vol.Required(CONF_BRAND, default=DEFAULT_BRAND): vol.In(SUPPORTED_BRANDS),
-                vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
+                vol.Required(CONF_REGION, default=DEFAULT_REGION): vol.In(
+                    SUPPORTED_REGIONS
+                ),
+                vol.Required(CONF_BRAND, default=DEFAULT_BRAND): vol.In(
+                    SUPPORTED_BRANDS
+                ),
+                vol.Optional(
+                    CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
+                ): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
                 vol.Optional(CONF_EXPOSE_RAW_SENSORS, default=True): bool,
-                vol.Optional(CONF_ENABLE_CONTROL_ENTITIES, default=False): bool,
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+
+
+class WhirlpoolApkOptionsFlow(config_entries.OptionsFlow):
+    """Handle Whirlpool Appliances options."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_SCAN_INTERVAL,
+                        default=self.config_entry.options.get(
+                            CONF_SCAN_INTERVAL,
+                            self.config_entry.data.get(
+                                CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+                            ),
+                        ),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
+                    vol.Optional(
+                        CONF_EXPOSE_RAW_SENSORS,
+                        default=self.config_entry.options.get(
+                            CONF_EXPOSE_RAW_SENSORS,
+                            self.config_entry.data.get(CONF_EXPOSE_RAW_SENSORS, True),
+                        ),
+                    ): bool,
+                }
+            ),
+        )
