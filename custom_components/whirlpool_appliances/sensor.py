@@ -226,6 +226,42 @@ def _mapped_key(mapping: Mapping[str, str], *keys: str) -> Callable[[Mapping[str
     return value
 
 
+def _cooktop_zone_value(flat: Mapping[str, Any], zone: int, *names: str) -> Any | None:
+    candidates: list[str] = []
+    for name in names:
+        candidates.extend(
+            (
+                f"zones.{zone}.{name}",
+                f"zone{zone}.{name}",
+                f"cooktop.zones.{zone}.{name}",
+                f"cooktop.zone{zone}.{name}",
+                f"cooktopZone{zone}.{name}",
+                f"cooktopZone{zone}{name[0].upper()}{name[1:]}",
+                f"Cooktop_Zone{zone}_{name}",
+                f"zone_{zone}_{name}",
+            )
+        )
+    return find_key(flat, tuple(candidates))
+
+
+def _hood_value(flat: Mapping[str, Any], *names: str) -> Any | None:
+    candidates: list[str] = []
+    for name in names:
+        candidates.extend(
+            (
+                name,
+                f"hood.{name}",
+                f"hoodFan.{name}",
+                f"hoodLight.{name}",
+                f"ventilation.{name}",
+                f"vent.{name}",
+                f"Hood_{name}",
+            )
+        )
+    return find_key(flat, tuple(candidates))
+
+
+
 SENSOR_DESCRIPTIONS: tuple[WhirlpoolApkSensorDescription, ...] = (
     WhirlpoolApkSensorDescription(key="state", translation_key="state", device_class=SensorDeviceClass.ENUM, value_fn=_mapped_key(MACHINE_STATE, "state", "machineState", "applianceState")),
     WhirlpoolApkSensorDescription(key="cycle", translation_key="cycle", value_fn=_by_keys("cycle", "cycleName", "currentCycle", "cycleLabel")),
@@ -248,6 +284,24 @@ SENSOR_DESCRIPTIONS: tuple[WhirlpoolApkSensorDescription, ...] = (
     WhirlpoolApkSensorDescription(key="ac_mode", translation_key="ac_mode", icon="mdi:air-conditioner", device_class=SensorDeviceClass.ENUM, options=list(AC_MODE.values()), value_fn=_mapped_key(AC_MODE, "ac.mode", "mode", "operationMode", "airconMode"), aircon_only=True),
     WhirlpoolApkSensorDescription(key="ac_fan_speed", translation_key="ac_fan_speed", icon="mdi:fan", value_fn=_by_keys("fanSpeed", "fan_speed", "ac.fanSpeed", "airconFanSpeed"), aircon_only=True),
     WhirlpoolApkSensorDescription(key="cooktop_state", translation_key="cooktop_state", icon="mdi:stove", value_fn=_by_keys("cooktopState", "cooktop.state", "machineState", "applianceState"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="hood_fan_speed", translation_key="hood_fan_speed", icon="mdi:fan", value_fn=lambda flat: _hood_value(flat, "fanSpeed", "hoodFan", "hoodFanSpeed", "fanLevel"), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="hood_light", translation_key="hood_light", icon="mdi:lightbulb", value_fn=lambda flat: _hood_value(flat, "hoodLight", "light", "lightOn", "HoodLight"), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="hood_light_color", translation_key="hood_light_color", icon="mdi:palette", value_fn=lambda flat: _hood_value(flat, "hoodLightColor", "lightColor", "color"), cooking_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_1_state", translation_key="cooktop_zone_1_state", icon="mdi:stove", value_fn=lambda flat, zone=1: _cooktop_zone_value(flat, zone, "state", "zoneState", "status"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_1_power", translation_key="cooktop_zone_1_power", icon="mdi:lightning-bolt", value_fn=lambda flat, zone=1: _cooktop_zone_value(flat, zone, "power", "powerLevel", "powerlevel", "level"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_1_temperature", translation_key="cooktop_zone_1_temperature", icon="mdi:thermometer", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=lambda flat, zone=1: _temperature_value(flat, f"zone1.temperature", f"cooktop.zone1.temperature", f"cooktopZone1.temperature"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_2_state", translation_key="cooktop_zone_2_state", icon="mdi:stove", value_fn=lambda flat, zone=2: _cooktop_zone_value(flat, zone, "state", "zoneState", "status"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_2_power", translation_key="cooktop_zone_2_power", icon="mdi:lightning-bolt", value_fn=lambda flat, zone=2: _cooktop_zone_value(flat, zone, "power", "powerLevel", "powerlevel", "level"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_2_temperature", translation_key="cooktop_zone_2_temperature", icon="mdi:thermometer", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=lambda flat, zone=2: _temperature_value(flat, f"zone2.temperature", f"cooktop.zone2.temperature", f"cooktopZone2.temperature"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_3_state", translation_key="cooktop_zone_3_state", icon="mdi:stove", value_fn=lambda flat, zone=3: _cooktop_zone_value(flat, zone, "state", "zoneState", "status"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_3_power", translation_key="cooktop_zone_3_power", icon="mdi:lightning-bolt", value_fn=lambda flat, zone=3: _cooktop_zone_value(flat, zone, "power", "powerLevel", "powerlevel", "level"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_3_temperature", translation_key="cooktop_zone_3_temperature", icon="mdi:thermometer", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=lambda flat, zone=3: _temperature_value(flat, f"zone3.temperature", f"cooktop.zone3.temperature", f"cooktopZone3.temperature"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_4_state", translation_key="cooktop_zone_4_state", icon="mdi:stove", value_fn=lambda flat, zone=4: _cooktop_zone_value(flat, zone, "state", "zoneState", "status"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_4_power", translation_key="cooktop_zone_4_power", icon="mdi:lightning-bolt", value_fn=lambda flat, zone=4: _cooktop_zone_value(flat, zone, "power", "powerLevel", "powerlevel", "level"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_4_temperature", translation_key="cooktop_zone_4_temperature", icon="mdi:thermometer", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=lambda flat, zone=4: _temperature_value(flat, f"zone4.temperature", f"cooktop.zone4.temperature", f"cooktopZone4.temperature"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_5_state", translation_key="cooktop_zone_5_state", icon="mdi:stove", value_fn=lambda flat, zone=5: _cooktop_zone_value(flat, zone, "state", "zoneState", "status"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_5_power", translation_key="cooktop_zone_5_power", icon="mdi:lightning-bolt", value_fn=lambda flat, zone=5: _cooktop_zone_value(flat, zone, "power", "powerLevel", "powerlevel", "level"), cooktop_only=True),
+    WhirlpoolApkSensorDescription(key="cooktop_zone_5_temperature", translation_key="cooktop_zone_5_temperature", icon="mdi:thermometer", device_class=SensorDeviceClass.TEMPERATURE, state_class=SensorStateClass.MEASUREMENT, native_unit_of_measurement=UnitOfTemperature.CELSIUS, value_fn=lambda flat, zone=5: _temperature_value(flat, f"zone5.temperature", f"cooktop.zone5.temperature", f"cooktopZone5.temperature"), cooktop_only=True),
     WhirlpoolApkSensorDescription(key="fault_code", translation_key="fault_code", icon="mdi:alert", value_fn=_active_fault),
     WhirlpoolApkSensorDescription(key="cook_mode", translation_key="cook_mode", icon="mdi:chef-hat", device_class=SensorDeviceClass.ENUM, options=list(COOK_MODE.values()), value_fn=lambda flat: _oven_cook_mode(flat, "upper") or _oven_cook_mode(flat, "lower"), cooking_only=True),
     WhirlpoolApkSensorDescription(key="upper_cavity_state", translation_key="upper_cavity_state", icon="mdi:stove", device_class=SensorDeviceClass.ENUM, options=list(CAVITY_STATE.values()), value_fn=_map_attr("OvenUpperCavity_OpStatusState", CAVITY_STATE), cooking_only=True),
@@ -385,6 +439,9 @@ THINGSHIELD_SENSOR_KEYS = (
     "ts_cavity_state",
     "ts_cooktop_zone_state",
     "ts_refrigerator_state",
+    "ts_hood_state",
+    "ts_hood_fan",
+    "ts_hood_light",
 )
 
 TS_SENSOR_CANDIDATES = {
@@ -395,12 +452,15 @@ TS_SENSOR_CANDIDATES = {
     "ts_cavity_state": ("cavityState", "cavityStatus.state", "ovenState"),
     "ts_cooktop_zone_state": ("cooktopZoneState", "zoneState", "cooktop.zoneState"),
     "ts_refrigerator_state": ("refrigeratorState", "refrigerationState", "fridgeState"),
+    "ts_hood_state": ("hoodState", "hood.state", "ventilationState"),
+    "ts_hood_fan": ("hoodFan", "hoodFanSpeed", "fanSpeed", "ventilation.fanSpeed"),
+    "ts_hood_light": ("hoodLight", "hoodLightOn", "hood.light", "lightOn"),
 }
 
 ACCESSORY_SENSOR_DEFINITIONS = {
     "probe_current_temperature": {
         "name": "Probe current temperature",
-        "keys": ("probeCurrentTemp", "currentTemperature", "probe.currentTemperature", "foodTemperature"),
+        "keys": ("probeCurrentTemp", "currentTemperature", "probe.currentTemperature", "foodTemperature", "meatProbe.temperature", "meatProbeTemp"),
         "device_class": SensorDeviceClass.TEMPERATURE,
         "unit": UnitOfTemperature.CELSIUS,
     },
@@ -429,7 +489,7 @@ ACCESSORY_SENSOR_DEFINITIONS = {
     },
     "probe_status": {
         "name": "Probe status",
-        "keys": ("probeStatus", "status", "probeStatusDetails"),
+        "keys": ("probeStatus", "status", "probeStatusDetails", "meatProbe.status"),
     },
     "probe_firmware_version": {
         "name": "Probe firmware version",

@@ -317,6 +317,32 @@ feature:
             - get_rms_recipes
             - get_rms_recipe
             - get_rms_recipe_view
+            - get_rms_drinks
+            - get_rms_drink
+            - get_rms_userdata
+            - get_rms_userdata_item
+            - get_dam_assets
+            - product_autocomplete
+            - get_energy_providers
+            - get_smart_energy
+            - get_voice_enabled_appliances
+            - get_alexa_status
+            - get_alexa_fallback_urls
+            - get_share_accounts
+            - get_share_account
+            - get_shared_appliances
+            - get_invitations
+            - get_invitation_members
+            - get_notification_subscriptions
+            - get_notification_device
+            - get_opt_out_status
+            - set_opt_out_status
+            - get_marketing_material
+            - send_cycle_feedback
+            - get_feedback_feature_names
+            - get_auto_replenishment_registration
+            - get_auto_replenishment_account_registrations
+            - replenish_auto_replenishment_registration
             - get_ts_ota_status
             - get_ts_ota_descriptor_status
             - get_ts_ota_descriptor
@@ -392,6 +418,46 @@ feature:
         text:
     filter_name:
       name: Filter name
+      required: false
+      selector:
+        text:
+    drink_id:
+      name: Drink ID
+      required: false
+      selector:
+        text:
+    userdata_id:
+      name: User data ID
+      required: false
+      selector:
+        text:
+    zip_code:
+      name: ZIP code
+      required: false
+      selector:
+        text:
+    location_id:
+      name: Location ID
+      required: false
+      selector:
+        text:
+    account_id:
+      name: Account ID
+      required: false
+      selector:
+        text:
+    device_id:
+      name: Device ID
+      required: false
+      selector:
+        text:
+    value:
+      name: Value
+      required: false
+      selector:
+        text:
+    share_request_id:
+      name: Share request ID
       required: false
       selector:
         text:

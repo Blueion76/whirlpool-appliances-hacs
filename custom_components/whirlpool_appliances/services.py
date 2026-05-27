@@ -72,6 +72,32 @@ FEATURE_ACTIONS = {
     "get_rms_recipes",
     "get_rms_recipe",
     "get_rms_recipe_view",
+    "get_rms_drinks",
+    "get_rms_drink",
+    "get_rms_userdata",
+    "get_rms_userdata_item",
+    "get_dam_assets",
+    "product_autocomplete",
+    "get_energy_providers",
+    "get_smart_energy",
+    "get_voice_enabled_appliances",
+    "get_alexa_status",
+    "get_alexa_fallback_urls",
+    "get_share_accounts",
+    "get_share_account",
+    "get_shared_appliances",
+    "get_invitations",
+    "get_invitation_members",
+    "get_notification_subscriptions",
+    "get_notification_device",
+    "get_opt_out_status",
+    "set_opt_out_status",
+    "get_marketing_material",
+    "send_cycle_feedback",
+    "get_feedback_feature_names",
+    "get_auto_replenishment_registration",
+    "get_auto_replenishment_account_registrations",
+    "replenish_auto_replenishment_registration",
     "get_ts_ota_status",
     "get_ts_ota_descriptor_status",
     "get_ts_ota_descriptor",
@@ -247,7 +273,7 @@ def register_services(hass: HomeAssistant) -> None:
     _register(hass, "history", history, _said_schema({vol.Required("action"): vol.In(sorted(HISTORY_ACTIONS)), vol.Optional("limit"): vol.Coerce(int), vol.Optional("params"): dict}))
     _register(hass, "favorites", favorites, _said_schema({vol.Required("action"): vol.In(sorted(FAVORITE_ACTIONS)), vol.Optional("favorite_id"): str}))
     _register(hass, "messages", messages, vol.Schema({vol.Required("action"): vol.In(sorted(MESSAGE_ACTIONS)), vol.Optional("message_id"): str}))
-    _register(hass, "feature", feature, _said_schema({vol.Required("action"): vol.In(sorted(FEATURE_ACTIONS)), vol.Optional("params"): dict, vol.Optional("body"): object, vol.Optional("ddm_key"): str, vol.Optional("serial_number"): str, vol.Optional("cycle_id"): str, vol.Optional("favorite_id"): str, vol.Optional("favorite_name"): str, vol.Optional("notes"): str, vol.Optional("query"): str, vol.Optional("upc"): str, vol.Optional("category"): str, vol.Optional("recipe_id"): str, vol.Optional("app", default="kitchenaid"): str, vol.Optional("filter_name"): str}))
+    _register(hass, "feature", feature, _said_schema({vol.Required("action"): vol.In(sorted(FEATURE_ACTIONS)), vol.Optional("params"): dict, vol.Optional("body"): object, vol.Optional("ddm_key"): str, vol.Optional("serial_number"): str, vol.Optional("cycle_id"): str, vol.Optional("favorite_id"): str, vol.Optional("favorite_name"): str, vol.Optional("notes"): str, vol.Optional("query"): str, vol.Optional("upc"): str, vol.Optional("category"): str, vol.Optional("recipe_id"): str, vol.Optional("app", default="kitchenaid"): str, vol.Optional("filter_name"): str, vol.Optional("drink_id"): str, vol.Optional("userdata_id"): str, vol.Optional("zip_code"): str, vol.Optional("location_id"): str, vol.Optional("account_id"): str, vol.Optional("device_id"): str, vol.Optional("value"): object, vol.Optional("share_request_id"): str}))
 
 
 def unregister_services(hass: HomeAssistant) -> None:
@@ -321,6 +347,61 @@ async def _feature_response(hass: HomeAssistant, call: ServiceCall) -> Any:
         return await client.request("GET", f"/api/v1/rms/{call.data.get('app', 'kitchenaid')}/recipes/{call.data['recipe_id']}", params=params)
     if action == "get_rms_recipe_view":
         return await client.request("GET", f"/api/v1/rms/{call.data.get('app', 'kitchenaid')}/views/{call.data['filter_name']}", params=params)
+    if action == "get_rms_drinks":
+        return await client.request("GET", f"/api/v1/rms/{call.data.get('app', 'jennair')}/drinks", params=params)
+    if action == "get_rms_drink":
+        return await client.request("GET", f"/api/v1/rms/{call.data.get('app', 'jennair')}/drinks/{call.data['drink_id']}", params=params)
+    if action == "get_rms_userdata":
+        return await client.request("GET", "/api/v1/rms/userdata", params=params)
+    if action == "get_rms_userdata_item":
+        return await client.request("GET", f"/api/v1/rms/userdata/{call.data['userdata_id']}", params=params)
+    if action == "get_dam_assets":
+        return await client.request("GET", "/api/v1/dam/assets", params=params)
+    if action == "product_autocomplete":
+        return await client.request("GET", "/api/v1/dam/product-autocomplete", params=params)
+    if action == "get_energy_providers":
+        return await client.request("GET", f"/api/v1/energy_providers/{call.data['zip_code']}", params=params)
+    if action == "get_smart_energy":
+        return await client.request("GET", f"/api/v1/locations/{call.data['location_id']}/smart_energy", params=params)
+    if action == "get_voice_enabled_appliances":
+        account_id = call.data.get("account_id") or await _account_id(client)
+        return await client.request("GET", f"/api/v1/voiceEnabledAppliances/{account_id}", params=params)
+    if action == "get_alexa_status":
+        account_id = call.data.get("account_id") or await _account_id(client)
+        return await client.request("GET", f"/api/v1/getEnabledFromAlexaStatus/{account_id}", params=params)
+    if action == "get_alexa_fallback_urls":
+        return await client.request("GET", "/api/v1/alexaappfallbackurls", params=params)
+    if action == "get_share_accounts":
+        return await client.request("GET", "/api/v1/share-accounts", params=params)
+    if action == "get_share_account":
+        return await client.request("GET", f"/api/v2/share-accounts/{call.data['account_id']}", params=params)
+    if action == "get_shared_appliances":
+        return await client.request("GET", "/api/v2/share-accounts/appliances", params=params)
+    if action == "get_invitations":
+        return await client.request("GET", "/api/v2/invitations", params=params)
+    if action == "get_invitation_members":
+        return await client.request("GET", f"/api/v2/invitations/members/{call.data['account_id']}", params=params)
+    if action == "get_notification_subscriptions":
+        return await client.request("GET", "/api/v2/notifications/subscriptions/multi", params=params)
+    if action == "get_notification_device":
+        return await client.request("GET", f"/api/v2/user/notification/device/{call.data['device_id']}", params=params)
+    if action == "get_opt_out_status":
+        return await client.request("GET", "/api/v1/OptOutStatus", params=params)
+    if action == "set_opt_out_status":
+        return await client.request("PUT", f"/api/v1/OptOutStatus/{call.data['value']}", json=body)
+    if action == "get_marketing_material":
+        return await client.request("GET", "/api/v2/marketing_material", params=params)
+    if action == "send_cycle_feedback":
+        return await client.request("POST", f"/api/v2/feature/cycle/feedback/{_service_said(hass, call)}", json=body)
+    if action == "get_feedback_feature_names":
+        return await client.request("GET", "/api/v2/client_auth/feedback/featureNames", params=params)
+    if action == "get_auto_replenishment_registration":
+        return await client.request("GET", f"/adrs/api/v2/registrations/{_service_said(hass, call)}", params=params)
+    if action == "get_auto_replenishment_account_registrations":
+        account_id = call.data.get("account_id") or await _account_id(client)
+        return await client.request("GET", f"/adrs/api/v2/registrations/accounts/{account_id}", params=params)
+    if action == "replenish_auto_replenishment_registration":
+        return await client.request("POST", f"/adrs/api/v2/registrations/replenish/{_service_said(hass, call)}", json=body)
     if action == "get_ts_ota_status":
         return await client.request("GET", f"/api/v1/ts/ota/status/{_service_said(hass, call)}")
     if action == "get_ts_ota_descriptor_status":
@@ -438,6 +519,14 @@ async def _user_id(client: WhirlpoolCloudClient) -> str:
     if not client.user_id:
         raise HomeAssistantError("Whirlpool account user ID is unavailable")
     return str(client.user_id)
+
+
+async def _account_id(client: WhirlpoolCloudClient) -> str:
+    if not client.account_id:
+        await client._populate_user_details()  # noqa: SLF001 - existing profile helper
+    if not client.account_id:
+        raise HomeAssistantError("Whirlpool account ID is unavailable")
+    return str(client.account_id)
 
 
 def _service_result(result: Any) -> dict[str, Any]:

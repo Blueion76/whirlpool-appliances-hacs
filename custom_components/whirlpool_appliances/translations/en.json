@@ -494,6 +494,126 @@
       },
       "cooktop_state": {
         "name": "Cooktop state"
+      },
+      "probe_current_temperature": {
+        "name": "Probe current temperature"
+      },
+      "probe_ambient_temperature": {
+        "name": "Probe ambient temperature"
+      },
+      "probe_middle_temperature": {
+        "name": "Probe middle temperature"
+      },
+      "probe_battery": {
+        "name": "Probe battery"
+      },
+      "probe_signal_strength": {
+        "name": "Probe signal strength"
+      },
+      "probe_status": {
+        "name": "Probe status"
+      },
+      "probe_firmware_version": {
+        "name": "Probe firmware version"
+      },
+      "probe_hardware_version": {
+        "name": "Probe hardware version"
+      },
+      "probe_serial_number": {
+        "name": "Probe serial number"
+      },
+      "probe_mac_address": {
+        "name": "Probe MAC address"
+      },
+      "probe_connected": {
+        "name": "Probe connected"
+      },
+      "probe_inserted": {
+        "name": "Probe inserted"
+      },
+      "ts_machine_state": {
+        "name": "TS machine state"
+      },
+      "ts_cycle": {
+        "name": "TS cycle"
+      },
+      "ts_phase": {
+        "name": "TS phase"
+      },
+      "ts_fault_code": {
+        "name": "TS fault code"
+      },
+      "ts_cavity_state": {
+        "name": "TS cavity state"
+      },
+      "ts_cooktop_zone_state": {
+        "name": "TS cooktop zone state"
+      },
+      "ts_refrigerator_state": {
+        "name": "TS refrigerator state"
+      },
+      "hood_fan_speed": {
+        "name": "Hood fan speed"
+      },
+      "hood_light": {
+        "name": "Hood light"
+      },
+      "hood_light_color": {
+        "name": "Hood light color"
+      },
+      "ts_hood_state": {
+        "name": "TS hood state"
+      },
+      "ts_hood_fan": {
+        "name": "TS hood fan"
+      },
+      "ts_hood_light": {
+        "name": "TS hood light"
+      },
+      "cooktop_zone_1_state": {
+        "name": "Cooktop zone 1 state"
+      },
+      "cooktop_zone_1_power": {
+        "name": "Cooktop zone 1 power"
+      },
+      "cooktop_zone_1_temperature": {
+        "name": "Cooktop zone 1 temperature"
+      },
+      "cooktop_zone_2_state": {
+        "name": "Cooktop zone 2 state"
+      },
+      "cooktop_zone_2_power": {
+        "name": "Cooktop zone 2 power"
+      },
+      "cooktop_zone_2_temperature": {
+        "name": "Cooktop zone 2 temperature"
+      },
+      "cooktop_zone_3_state": {
+        "name": "Cooktop zone 3 state"
+      },
+      "cooktop_zone_3_power": {
+        "name": "Cooktop zone 3 power"
+      },
+      "cooktop_zone_3_temperature": {
+        "name": "Cooktop zone 3 temperature"
+      },
+      "cooktop_zone_4_state": {
+        "name": "Cooktop zone 4 state"
+      },
+      "cooktop_zone_4_power": {
+        "name": "Cooktop zone 4 power"
+      },
+      "cooktop_zone_4_temperature": {
+        "name": "Cooktop zone 4 temperature"
+      },
+      "cooktop_zone_5_state": {
+        "name": "Cooktop zone 5 state"
+      },
+      "cooktop_zone_5_power": {
+        "name": "Cooktop zone 5 power"
+      },
+      "cooktop_zone_5_temperature": {
+        "name": "Cooktop zone 5 temperature"
       }
     },
     "switch": {
@@ -551,7 +671,7 @@
   "services": {
     "call_api": {
       "name": "Call Whirlpool API",
-      "description": "Call a Whirlpool cloud API path and return the decoded response.",
+      "description": "Call any Whirlpool cloud API path and return the decoded response.",
       "fields": {
         "method": {
           "name": "Method",
@@ -559,7 +679,7 @@
         },
         "path": {
           "name": "Path",
-          "description": "Whirlpool API path or URL."
+          "description": "API path or full URL."
         },
         "body": {
           "name": "Body",
@@ -571,13 +691,13 @@
         },
         "auth": {
           "name": "Authorization header",
-          "description": "Send authorization header."
+          "description": "Send the OAuth authorization header."
         }
       }
     },
     "send_appliance_command": {
-      "name": "Send appliance request",
-      "description": "Send an appliance request.",
+      "name": "Send appliance command",
+      "description": "Send a raw Whirlpool appliance command.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -588,8 +708,8 @@
           "description": "Manual SAID override."
         },
         "command": {
-          "name": "Request",
-          "description": "Request name."
+          "name": "Command",
+          "description": "Command name."
         },
         "attributes": {
           "name": "Attributes",
@@ -601,107 +721,9 @@
         }
       }
     },
-    "set_cavity_light": {
-      "name": "Set cavity light",
-      "description": "Turn a cavity light on or off.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        },
-        "enabled": {
-          "name": "Enabled",
-          "description": "Turn on or off."
-        },
-        "cavity": {
-          "name": "Cavity",
-          "description": "Cavity to control."
-        }
-      }
-    },
-    "appliance_function": {
-      "name": "Appliance function",
-      "description": "Call a named appliance helper function.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        },
-        "function": {
-          "name": "Function",
-          "description": "Function to call."
-        },
-        "body": {
-          "name": "Body",
-          "description": "Optional request body."
-        },
-        "path_values": {
-          "name": "Path values",
-          "description": "Optional path values."
-        }
-      }
-    },
-    "refresh": {
-      "name": "Refresh Whirlpool data",
-      "description": "Refresh appliance data now."
-    },
-    "refresh_ddm_capabilities": {
-      "name": "Refresh DDM capabilities",
-      "description": "Refresh Device Data Model capabilities."
-    },
-    "update_appliances": {
-      "name": "Update appliances",
-      "description": "Call Whirlpool appliance update endpoint.",
-      "fields": {
-        "body": {
-          "name": "Body",
-          "description": "Optional request body."
-        }
-      }
-    },
-    "get_ddm_content": {
-      "name": "Get DDM content",
-      "description": "Fetch content metadata for a Device Data Model key.",
-      "fields": {
-        "ddm_key": {
-          "name": "DDM key",
-          "description": "Device Data Model key."
-        }
-      }
-    },
-    "publish_thing_command": {
-      "name": "Publish ThingShield request",
-      "description": "Publish a ThingShield MQTT request.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        },
-        "command": {
-          "name": "Request",
-          "description": "ThingShield request name."
-        },
-        "payload": {
-          "name": "Payload",
-          "description": "Optional payload."
-        }
-      }
-    },
     "set_attributes": {
       "name": "Set appliance attributes",
-      "description": "Set appliance attributes.",
+      "description": "Set raw legacy SAID attributes.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -717,9 +739,9 @@
         }
       }
     },
-    "set_oven_cook": {
-      "name": "Set oven cook cycle",
-      "description": "Set an oven cook cycle.",
+    "oven_control": {
+      "name": "Oven control",
+      "description": "Grouped oven action service for cooking, Frozen Bake, and stopping a cavity.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -729,6 +751,14 @@
           "name": "SAID",
           "description": "Manual SAID override."
         },
+        "action": {
+          "name": "Action",
+          "description": "Oven action to run."
+        },
+        "cavity": {
+          "name": "Cavity",
+          "description": "Oven cavity."
+        },
         "temperature": {
           "name": "Temperature",
           "description": "Target temperature in Celsius."
@@ -736,6 +766,10 @@
         "mode": {
           "name": "Mode",
           "description": "Oven mode."
+        },
+        "food": {
+          "name": "Food",
+          "description": "Frozen Bake food preset."
         },
         "cook_time_minutes": {
           "name": "Cook time",
@@ -748,16 +782,12 @@
         "complete_action": {
           "name": "Complete action",
           "description": "Action when cook time completes."
-        },
-        "cavity": {
-          "name": "Cavity",
-          "description": "Oven cavity."
         }
       }
     },
-    "set_oven_frozen_bake": {
-      "name": "Set Frozen Bake",
-      "description": "Set a Frozen Bake cycle.",
+    "appliance_option": {
+      "name": "Appliance option",
+      "description": "Grouped appliance option service for lights, quiet/remote, timers, time, firmware check, and AC filter actions.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -767,129 +797,21 @@
           "name": "SAID",
           "description": "Manual SAID override."
         },
-        "food": {
-          "name": "Food",
-          "description": "Frozen food preset."
-        },
-        "temperature": {
-          "name": "Temperature",
-          "description": "Target temperature in Celsius."
-        },
-        "cook_time_minutes": {
-          "name": "Cook time",
-          "description": "Cook time in minutes."
-        },
-        "complete_action": {
-          "name": "Complete action",
-          "description": "Action when cook time completes."
-        },
-        "cavity": {
-          "name": "Cavity",
-          "description": "Oven cavity."
-        }
-      }
-    },
-    "stop_oven_cavity": {
-      "name": "Stop oven cavity",
-      "description": "Stop an oven cavity.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        },
-        "cavity": {
-          "name": "Cavity",
-          "description": "Oven cavity."
-        }
-      }
-    },
-    "stop_microwave": {
-      "name": "Stop microwave",
-      "description": "Stop microwave operation.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        }
-      }
-    },
-    "sync_time": {
-      "name": "Sync appliance time",
-      "description": "Sync appliance time.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        },
-        "timezone": {
-          "name": "Time zone",
-          "description": "Optional IANA time zone."
-        }
-      }
-    },
-    "set_timezone": {
-      "name": "Set appliance time zone",
-      "description": "Set appliance time zone attributes.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        },
-        "timezone": {
-          "name": "Time zone",
-          "description": "IANA time zone, such as America/Chicago."
-        }
-      }
-    },
-    "set_time_auto_update": {
-      "name": "Set time auto update",
-      "description": "Turn automatic time update on or off.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
+        "action": {
+          "name": "Action",
+          "description": "Option action to run."
         },
         "enabled": {
           "name": "Enabled",
           "description": "Turn on or off."
         },
-        "timezone": {
-          "name": "Time zone",
-          "description": "Optional IANA time zone."
-        }
-      }
-    },
-    "set_kitchen_timer": {
-      "name": "Set kitchen timer",
-      "description": "Set the appliance kitchen timer.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
+        "on": {
+          "name": "On",
+          "description": "Legacy boolean value."
         },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
+        "cavity": {
+          "name": "Cavity",
+          "description": "Cavity to control."
         },
         "seconds": {
           "name": "Seconds",
@@ -898,12 +820,30 @@
         "timer": {
           "name": "Timer",
           "description": "Kitchen timer number."
+        },
+        "timezone": {
+          "name": "Time zone",
+          "description": "IANA time zone."
+        },
+        "body": {
+          "name": "Body",
+          "description": "Optional request body override."
         }
       }
     },
-    "stop_kitchen_timer": {
-      "name": "Stop kitchen timer",
-      "description": "Stop the appliance kitchen timer.",
+    "refresh": {
+      "name": "Refresh Whirlpool data",
+      "description": "Refresh status data or force-refresh DDM capabilities.",
+      "fields": {
+        "action": {
+          "name": "Action",
+          "description": "Refresh action to run."
+        }
+      }
+    },
+    "history": {
+      "name": "History",
+      "description": "Fetch cycle or fault history.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -913,73 +853,9 @@
           "name": "SAID",
           "description": "Manual SAID override."
         },
-        "timer": {
-          "name": "Timer",
-          "description": "Kitchen timer number."
-        }
-      }
-    },
-    "check_firmware_update": {
-      "name": "Check firmware update",
-      "description": "Check for firmware update availability.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        }
-      }
-    },
-    "set_quiet_mode": {
-      "name": "Set quiet mode",
-      "description": "Turn quiet mode on or off.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        },
-        "enabled": {
-          "name": "Enabled",
-          "description": "Turn on or off."
-        }
-      }
-    },
-    "set_remote_enable": {
-      "name": "Set remote enable",
-      "description": "Turn remote enable on or off.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        },
-        "enabled": {
-          "name": "Enabled",
-          "description": "Turn on or off."
-        }
-      }
-    },
-    "get_cycle_history": {
-      "name": "Get cycle history",
-      "description": "Fetch cycle history.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
+        "action": {
+          "name": "Action",
+          "description": "History type to fetch."
         },
         "limit": {
           "name": "Limit",
@@ -991,9 +867,9 @@
         }
       }
     },
-    "get_fault_history": {
-      "name": "Get fault history",
-      "description": "Fetch fault-code history.",
+    "favorites": {
+      "name": "Favorites",
+      "description": "Fetch or delete appliance saved/favorite cycles.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -1003,41 +879,9 @@
           "name": "SAID",
           "description": "Manual SAID override."
         },
-        "limit": {
-          "name": "Limit",
-          "description": "Maximum records to return."
-        },
-        "params": {
-          "name": "Query parameters",
-          "description": "Optional query parameters."
-        }
-      }
-    },
-    "get_favorites": {
-      "name": "Get favorites",
-      "description": "Fetch saved/favorite cycles.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        }
-      }
-    },
-    "delete_favorite": {
-      "name": "Delete favorite",
-      "description": "Delete a saved/favorite cycle.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
+        "action": {
+          "name": "Action",
+          "description": "Favorites action to run."
         },
         "favorite_id": {
           "name": "Favorite ID",
@@ -1045,101 +889,123 @@
         }
       }
     },
-    "get_messages": {
-      "name": "Get messages",
-      "description": "Fetch account message-center messages."
-    },
-    "get_message": {
-      "name": "Get message",
-      "description": "Fetch one message-center item.",
+    "messages": {
+      "name": "Messages",
+      "description": "Fetch or dismiss Whirlpool account message-center messages.",
       "fields": {
+        "action": {
+          "name": "Action",
+          "description": "Message action to run."
+        },
         "message_id": {
           "name": "Message ID",
           "description": "Message identifier."
         }
       }
     },
-    "dismiss_message": {
-      "name": "Dismiss message",
-      "description": "Dismiss one message-center item.",
+    "feature": {
+      "name": "Feature",
+      "description": "Grouped Whirlpool/JennAir/KitchenAid feature service for DDM content, accessories, recipes, drinks, energy, sharing, notifications, TS OTA, documents, diagnostics, and video capability discovery.",
       "fields": {
-        "message_id": {
-          "name": "Message ID",
-          "description": "Message identifier."
-        }
-      }
-    },
-    "get_accessories": {
-      "name": "Get accessories",
-      "description": "Fetch account accessories."
-    },
-    "get_accessory_status": {
-      "name": "Get accessory status",
-      "description": "Fetch accessory status by serial number.",
-      "fields": {
-        "serial_number": {
-          "name": "Serial number",
-          "description": "Accessory serial number."
-        }
-      }
-    },
-    "get_accessory_cycle_history": {
-      "name": "Get accessory cycle history",
-      "description": "Fetch accessory cycle history.",
-      "fields": {
+        "appliance_device": {
+          "name": "Appliance device",
+          "description": "Whirlpool appliance device."
+        },
+        "said": {
+          "name": "SAID",
+          "description": "Manual SAID override."
+        },
+        "action": {
+          "name": "Action",
+          "description": "Feature action to run."
+        },
         "params": {
           "name": "Query parameters",
           "description": "Optional query parameters."
-        }
-      }
-    },
-    "get_accessory_ota_status": {
-      "name": "Get accessory OTA status",
-      "description": "Fetch accessory OTA status."
-    },
-    "live_collect": {
-      "name": "Live collect",
-      "description": "Fetch live diagnostic data for an appliance.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        }
-      }
-    },
-    "get_ac_filter_status": {
-      "name": "Get AC filter status",
-      "description": "Fetch AC filter status.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
-        }
-      }
-    },
-    "reset_ac_filter": {
-      "name": "Reset AC filter",
-      "description": "Reset AC filter status.",
-      "fields": {
-        "appliance_device": {
-          "name": "Appliance device",
-          "description": "Whirlpool appliance device."
-        },
-        "said": {
-          "name": "SAID",
-          "description": "Manual SAID override."
         },
         "body": {
           "name": "Body",
-          "description": "Optional request body override."
+          "description": "Optional request body."
+        },
+        "ddm_key": {
+          "name": "DDM key",
+          "description": "Device Data Model key."
+        },
+        "serial_number": {
+          "name": "Serial number",
+          "description": "Accessory serial number."
+        },
+        "cycle_id": {
+          "name": "Cycle ID",
+          "description": "Accessory or recipe cycle identifier."
+        },
+        "favorite_id": {
+          "name": "Favorite ID",
+          "description": "Favorite identifier."
+        },
+        "favorite_name": {
+          "name": "Favorite name",
+          "description": "Favorite name."
+        },
+        "notes": {
+          "name": "Notes",
+          "description": "Favorite notes."
+        },
+        "query": {
+          "name": "Query",
+          "description": "Search query."
+        },
+        "upc": {
+          "name": "UPC",
+          "description": "Recipe UPC barcode."
+        },
+        "category": {
+          "name": "Category",
+          "description": "Scan2Cook category."
+        },
+        "recipe_id": {
+          "name": "Recipe ID",
+          "description": "Recipe identifier."
+        },
+        "app": {
+          "name": "RMS app",
+          "description": "RMS app name."
+        },
+        "filter_name": {
+          "name": "Filter name",
+          "description": "RMS view/filter name."
+        },
+        "drink_id": {
+          "name": "Drink ID",
+          "description": "RMS drink identifier."
+        },
+        "userdata_id": {
+          "name": "User data ID",
+          "description": "RMS user data identifier."
+        },
+        "zip_code": {
+          "name": "ZIP code",
+          "description": "ZIP code for energy provider lookup."
+        },
+        "location_id": {
+          "name": "Location ID",
+          "description": "Whirlpool location identifier."
+        },
+        "account_id": {
+          "name": "Account ID",
+          "description": "Whirlpool account identifier."
+        },
+        "device_id": {
+          "name": "Device ID",
+          "description": "Notification or mobile device identifier."
+        },
+        "value": {
+          "name": "Value",
+          "description": "Endpoint value to send."
+        },
+        "share_request_id": {
+          "name": "Share request ID",
+          "description": "Shared-account invite/request identifier."
         }
       }
     }
