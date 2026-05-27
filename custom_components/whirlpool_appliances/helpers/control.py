@@ -169,8 +169,6 @@ def raise_if_common_blocked(flat: Mapping[str, Any], *, microwave: bool = False,
     """Raise Home Assistant translated errors for common command-blocking states."""
     if control_lock_on(flat):
         raise ServiceValidationError(translation_domain=DOMAIN, translation_key="control_lock_on")
-    if remote_control_off(flat):
-        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="remote_control_off")
     if microwave and microwave_door_open(flat):
         raise ServiceValidationError(translation_domain=DOMAIN, translation_key="door_open")
     if not microwave and oven_door_open(flat, cavity):
