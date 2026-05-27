@@ -107,9 +107,24 @@ jobs:
           prev="${{ steps.prev_tag.outputs.prev_tag }}"
           if [ -z "$prev" ]; then prev="initial release"; fi
 
+          cat > release_notes.md <<'EOF'
+          Automated release for manifest version ${{ steps.manifest.outputs.version }}
+
+          Changes since __PREV__:
+          __NOTES__
+          EOF
+
+          # Replace placeholders safely
+          sed -i "s/__PREV__/${prev}/" release_notes.md
+          # notes output is multi-line; inject it at the placeholder line
+          perl -0777 -i -pe 's/__NOTES__/$ENV{NOTES}/' release_notes.md
+
           gh release create "${{ steps.manifest.outputs.tag }}" \
             --title "${{ steps.manifest.outputs.tag }}" \
-            --notes "Automated release for manifest version ${{ steps.manifest.outputs.version }}.
+            --notes-file release_notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ steps.notes.outputs.notes }}
 
 Changes since ${prev}:
 ${{ steps.notes.outputs.notes }}"
