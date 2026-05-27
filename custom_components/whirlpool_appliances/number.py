@@ -37,6 +37,12 @@ from .helpers.oven_options import current_oven_options, local_options, minutes_t
 _LOGGER = logging.getLogger(__name__)
 
 
+class WhirlpoolWholeNumberEntity(NumberEntity):
+    """Number entity with whole-number suggested display precision."""
+
+    _attr_suggested_display_precision = 0
+
+
 def _temp_from_tenths(value: Any) -> float | None:
     """Convert Whirlpool tenths-of-Celsius values to Celsius."""
     if value in (None, "", "0", 0):
@@ -154,7 +160,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, NumberEntity):
+class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, WhirlpoolWholeNumberEntity):
     """Pending oven target temperature selector.
 
     Native value is Celsius. Home Assistant can convert/display it in the
@@ -174,7 +180,6 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, NumberEntity):
             native_step=1,
             native_unit_of_measurement=UnitOfTemperature.CELSIUS,
             mode=NumberMode.BOX,
-            suggested_display_precision=0,
         )
         self._attr_name = entity_name_from_key(suffix, appliance)
 
@@ -210,7 +215,7 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, NumberEntity):
         self.async_write_ha_state()
 
 
-class WhirlpoolOvenDurationNumber(WhirlpoolApkEntity, NumberEntity):
+class WhirlpoolOvenDurationNumber(WhirlpoolApkEntity, WhirlpoolWholeNumberEntity):
     """Oven cook/delay duration in minutes."""
 
     def __init__(self, coordinator, appliance: Mapping[str, object], cavity: str, kind: str) -> None:
@@ -228,7 +233,6 @@ class WhirlpoolOvenDurationNumber(WhirlpoolApkEntity, NumberEntity):
             native_step=1,
             native_unit_of_measurement=UnitOfTime.MINUTES,
             mode=NumberMode.BOX,
-            suggested_display_precision=0,
         )
         self._attr_name = entity_name_from_key(suffix, appliance)
 
@@ -259,7 +263,7 @@ class WhirlpoolOvenDurationNumber(WhirlpoolApkEntity, NumberEntity):
         self.async_write_ha_state()
 
 
-class WhirlpoolKitchenTimerNumber(WhirlpoolApkEntity, NumberEntity):
+class WhirlpoolKitchenTimerNumber(WhirlpoolApkEntity, WhirlpoolWholeNumberEntity):
     """Kitchen timer duration in minutes."""
 
     def __init__(self, coordinator, appliance: Mapping[str, object]) -> None:
@@ -274,7 +278,6 @@ class WhirlpoolKitchenTimerNumber(WhirlpoolApkEntity, NumberEntity):
             native_step=1,
             native_unit_of_measurement=UnitOfTime.MINUTES,
             mode=NumberMode.BOX,
-            suggested_display_precision=0,
         )
         self._attr_name = entity_name_from_key("kitchen_timer_1_set", appliance)
 
@@ -289,7 +292,7 @@ class WhirlpoolKitchenTimerNumber(WhirlpoolApkEntity, NumberEntity):
         await self.coordinator.async_request_refresh()
 
 
-class WhirlpoolDisplayBrightnessNumber(WhirlpoolApkEntity, NumberEntity):
+class WhirlpoolDisplayBrightnessNumber(WhirlpoolApkEntity, WhirlpoolWholeNumberEntity):
     """Display brightness percentage control."""
 
     def __init__(self, coordinator, appliance: Mapping[str, object]) -> None:
@@ -303,7 +306,6 @@ class WhirlpoolDisplayBrightnessNumber(WhirlpoolApkEntity, NumberEntity):
             native_step=1,
             native_unit_of_measurement=PERCENTAGE,
             mode=NumberMode.SLIDER,
-            suggested_display_precision=0,
         )
         self._attr_name = entity_name_from_key("display_brightness_percent", appliance)
 
@@ -322,7 +324,7 @@ class WhirlpoolDisplayBrightnessNumber(WhirlpoolApkEntity, NumberEntity):
         await self.coordinator.async_request_refresh()
 
 
-class WhirlpoolMicrowaveDurationNumber(WhirlpoolApkEntity, NumberEntity):
+class WhirlpoolMicrowaveDurationNumber(WhirlpoolApkEntity, WhirlpoolWholeNumberEntity):
     """Microwave cook duration in minutes."""
 
     def __init__(self, coordinator, appliance: Mapping[str, object]) -> None:
@@ -337,7 +339,6 @@ class WhirlpoolMicrowaveDurationNumber(WhirlpoolApkEntity, NumberEntity):
             native_step=1,
             native_unit_of_measurement=UnitOfTime.MINUTES,
             mode=NumberMode.BOX,
-            suggested_display_precision=0,
         )
         self._attr_name = entity_name_from_key("microwave_cook_time", appliance)
 
@@ -355,7 +356,7 @@ class WhirlpoolMicrowaveDurationNumber(WhirlpoolApkEntity, NumberEntity):
         self.async_write_ha_state()
 
 
-class WhirlpoolMicrowaveNumber(WhirlpoolApkEntity, NumberEntity):
+class WhirlpoolMicrowaveNumber(WhirlpoolApkEntity, WhirlpoolWholeNumberEntity):
     """Microwave non-time pending option number."""
 
     def __init__(self, coordinator, appliance: Mapping[str, object], key: str, option_key: str) -> None:
@@ -372,7 +373,6 @@ class WhirlpoolMicrowaveNumber(WhirlpoolApkEntity, NumberEntity):
                 native_step=1,
                 native_unit_of_measurement=PERCENTAGE,
                 mode=NumberMode.SLIDER,
-                suggested_display_precision=0,
             )
         elif key == "microwave_amount":
             desc = NumberEntityDescription(
@@ -383,7 +383,6 @@ class WhirlpoolMicrowaveNumber(WhirlpoolApkEntity, NumberEntity):
                 native_max_value=65535,
                 native_step=1,
                 mode=NumberMode.BOX,
-                suggested_display_precision=0,
             )
         else:
             desc = NumberEntityDescription(
@@ -396,7 +395,6 @@ class WhirlpoolMicrowaveNumber(WhirlpoolApkEntity, NumberEntity):
                 native_step=1,
                 native_unit_of_measurement=UnitOfTemperature.CELSIUS,
                 mode=NumberMode.BOX,
-                suggested_display_precision=0,
             )
 
         self.entity_description = desc
