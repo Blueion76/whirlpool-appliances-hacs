@@ -1,49 +1,81 @@
 # Whirlpool Appliances
 
-A custom Home Assistant integration for Whirlpool cloud-connected appliances.
+Home Assistant custom integration (HACS) for Whirlpool cloud-connected appliances.
 
-This integration is based on the Whirlpool Android app/API behavior and is intended to support Whirlpool, Maytag, KitchenAid, JennAir, Amana, and related Whirlpool cloud appliances, with extra focus on legacy Whirlpool cooking appliances such as oven/microwave combo units.
+> **Disclaimer**: This project is unofficial and is not affiliated with, endorsed by, or supported by Whirlpool Corporation.
 
-> This project is unofficial and is not affiliated with, endorsed by, or supported by Whirlpool Corporation.
+## Supported brands
 
-> Please note this integration was made with AI.
+Whirlpool’s cloud platform is shared across multiple brands. This integration is intended to work with appliances connected through the official apps for:
 
-## What it supports
+- Whirlpool
+- Maytag
+- KitchenAid
+- JennAir
+- Amana
 
-- Config flow login now follows the same `/oauth/token` password-grant path used by `MizterB/homeassistant-whirlpool` / `whirlpool-sixth-sense`, with account-locked handling and same-region brand credential fallback.
-- US/EU production base URLs observed in the APK, plus stage/QA/dev/test/custom for debugging.
+## Supported appliance types
+
+The integration aims to support the most common Whirlpool-connected appliance categories, including:
+
+- Washers / dryers (including laundry pairs)
+- Dishwashers
+- Refrigerators
+- Ovens / ranges (including cavity light where supported)
+- Microwaves
+
+> Not every model exposes the same capabilities. Entities and services are created dynamically from the appliance capabilities/status returned by the cloud API.
+
+## Tested appliances
+
+The following appliance types have been reported as working with this integration:
+
+- **Not yet documented**
+
+If you have a confirmed working model, please open an issue or PR with:
+
+- Brand + model number
+- Region (US/EU)
+- Appliance type
+- Whether it is a legacy **SAID** appliance or a ThingShield **TS_SAID** appliance
+
+## Features
+
+- Region-aware login using the same mobile OAuth flow (`POST /oauth/token` with `grant_type=password`).
 - Appliance discovery through account/location endpoints.
-- Status polling from `/api/v1/appliance/status/{said}` for legacy `SAID` appliances.
-- ThingShield `TS_SAID` support through OAuth → Cognito → AWS IoT MQTT, including state/update, command response, presence, OTA status, and capability response subscriptions.
-- Generic sensors/binary sensors for state, cycle, phase, time remaining, temperatures, humidity, filter, fault, online, door, remote control, running, and error.
-- Raw diagnostic status sensor, disabled by default.
-- Services for all major appliance API actions discovered in the APK.
-- `whirlpool_appliances.publish_thing_command` for ThingShield MQTT commands, with `getState` as the safe default.
-- Generic service escape hatch: `whirlpool_appliances.call_api`.
-- Command service: `whirlpool_appliances.send_appliance_command` using `/api/v1/appliance/command`.
-- Cavity light wrapper using the APK-observed `setCavityLight`/`cavityLight` strings.
+- Legacy status polling via `/api/v1/appliance/status/{said}`.
+- ThingShield device support via OAuth → Cognito → AWS IoT MQTT, including:
+  - state/update subscriptions
+  - command response subscriptions
+  - presence/online status
+  - OTA status
+  - capability responses
+- Sensors and binary sensors for common state fields (cycle/phase/time remaining/temperatures/humidity/filter/fault/online/door/remote control/running/error).
+- Optional raw diagnostic sensor (disabled by default).
+- Services for major appliance actions observed in the Android app.
+- MQTT command service for ThingShield devices (`whirlpool_appliances.publish_thing_command`) with `getState` as a safe default.
+- Generic escape hatch service: `whirlpool_appliances.call_api`.
+- REST command service: `whirlpool_appliances.send_appliance_command`.
 
+## Installation (HACS)
 
-## Login behavior
+1. Add this repository to HACS as a **Custom repository** (Integration).
+2. Install **Whirlpool Appliances** from HACS.
+3. Restart Home Assistant.
+4. Go to **Settings → Devices & services → Add integration** and search for **Whirlpool Appliances**.
+5. Sign in with your Whirlpool app account.
 
-This build intentionally removed the extra guessed APK login endpoints and uses the proven mobile OAuth flow: `POST /oauth/token` with `grant_type=password`, the selected region base URL, the Android `okhttp/3.12.0` user agent, and the public Whirlpool/Maytag/KitchenAid mobile client credentials. If the selected brand fails, the integration tries other known client credentials for the same region before showing an auth error.
+## Configuration
 
-## Installation
+After setup, you can adjust options from:
 
-1. Copy `custom_components/whirlpool_appliances` into your Home Assistant `config/custom_components/` directory.
-2. Restart Home Assistant.
-3. Add integration: **Settings → Devices & services → Add integration → Whirlpool Appliances**.
-4. Use your Whirlpool app account credentials.
+**Settings → Devices & services → Whirlpool Appliances → Configure**
 
-You can adjust polling/diagnostic options later from **Settings → Devices & services → Whirlpool Appliances → Configure**.
+Typical options include polling frequency and diagnostic entity toggles.
 
-## Important limitations
+## Usage
 
-This was derived from a static APK inspection, not from a live Whirlpool account session. Whirlpool uses obfuscated mobile code, changing DTO payloads, legacy REST/STOMP for older `SAID` devices, and AWS IoT MQTT for newer `TS_SAID` devices. The integration is therefore intentionally data-driven: it exposes all discovered API paths and robust raw-status entities, but some command payloads may require adjustment from Home Assistant logs for your exact appliance model.
-
-Do not use stage/QA/dev environments unless you know why you need them.
-
-## Example service calls
+### Example service calls
 
 ```yaml
 service: whirlpool_appliances.call_api
@@ -75,25 +107,33 @@ data:
   command: getState
 ```
 
-See `docs/API_FINDINGS.md` for the extracted API map.
+## Known limitations
 
+- Whirlpool’s APIs and payloads are subject to change.
+- Some older devices use legacy REST/STOMP patterns, while newer devices use ThingShield/AWS IoT.
+- Stage/QA/dev/test endpoints are provided for debugging and should not be used unless you know exactly why you need them.
 
+## Documentation
 
-## Disclaimer
+- Extracted API map: `docs/API_FINDINGS.md`
 
-This integration is unofficial and is not affiliated with Whirlpool Corporation.
+## Support
 
-Use remote appliance controls carefully. Starting ovens, microwaves, or cooking appliances remotely can create safety risks. Make sure the appliance is empty/safe to operate before sending commands.
+Please include diagnostics when reporting issues:
+
+- Home Assistant version
+- Integration version
+- Appliance brand/model and region
+- Whether your device uses **SAID** or **TS_SAID**
+- Relevant logs (redact tokens)
 
 ## Development
 
-This repository includes basic checks used in CI:
+CI checks used in this repository:
 
 - `ruff format --check .`
 - `ruff check .`
 - Home Assistant `hassfest`
-
-Ruff is currently scoped to the integration's config flow file in `pyproject.toml` as an incremental baseline for this repository.
 
 Optional local hooks:
 
