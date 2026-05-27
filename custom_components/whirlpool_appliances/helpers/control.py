@@ -212,7 +212,7 @@ def oven_cook_attrs(
 
 
 def microwave_attrs(options: Mapping[str, Any]) -> dict[str, str]:
-    """Build microwave SetOnDisplay attributes from local pending options."""
+    """Build microwave start attributes from local pending options."""
     mode = str(options.get("mode") or "Cook")
     preset = str(options.get("preset") or "Manual")
     attr = MWO_MODE_TO_ATTR.get(mode)
@@ -223,8 +223,8 @@ def microwave_attrs(options: Mapping[str, Any]) -> dict[str, str]:
 
     attrs: dict[str, str] = {
         attr: str(code),
-        # User-confirmed value for this combo model: SetOnDisplay, not Start.
-        "Mwo_OperationSetOperations": "3",
+        # User-confirmed value for this combo model: operation 2 starts after settings are staged.
+        "Mwo_OperationSetOperations": "2",
     }
     cook_time = options.get("cook_time_seconds")
     if cook_time is not None and int(cook_time) > 0:
