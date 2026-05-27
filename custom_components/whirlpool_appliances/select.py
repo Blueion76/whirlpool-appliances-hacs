@@ -1,12 +1,10 @@
-"""Select entities for cycle/control values discovered in appliance status."""
+"""Select entities for cycle/control values discovered in appliance status and DDM capabilities."""
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
 from typing import Any
 
 from homeassistant.components.select import SelectEntity
-from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -37,23 +35,14 @@ from .control_helpers import (
 )
 from .entity import WhirlpoolApkEntity, attr_value, entity_name_from_key, find_key, is_cooking_appliance, is_refrigerator_appliance, microwave_exists, oven_cavity_exists
 from .logging_utils import summarize
-from .oven_options import FROZEN_BAKE_FOOD_OPTIONS, current_oven_options, local_options, minutes_to_seconds, update_local_options
-
-_LOGGER = logging.getLogger(__name__)
-
-REFRIGERATOR_TEMP_MAP = {-4: "12", -2: "11", 0: "10", 3: "9", 5: "8"}
-REFRIGERATOR_TEMP_MAP_REVERSED = {value: str(key) for key, value in REFRIGERATOR_TEMP_MAP.items()}
+from .oven_options import current_oven_options, local_options, minutes_to_seconds, update_local_options
 
 OVEN_MODE_CODE_TO_NAME = {"0": "Standby", "2": "Bake", "6": "Convection Bake", "8": "Broil", "9": "Convection Broil", "16": "Convection Roast", "24": "Keep Warm", "41": "Air Fry"}
-OVEN_MODE_NAME_TO_CODE = {name: code for code, name in OVEN_MODE_CODE_TO_NAME.items()}
 OVEN_MODE_NAME_TO_SERVICE = {"Standby": "standby", "Bake": "bake", "Convection Bake": "convect_bake", "Broil": "broil", "Convection Broil": "convect_broil", "Convection Roast": "convect_roast", "Keep Warm": "keep_warm", "Air Fry": "air_fry"}
-OVEN_MODE_OPTIONS = list(OVEN_MODE_CODE_TO_NAME.values())
 OVEN_COMPLETE_ACTION_CODE_TO_NAME = {"1": "Stay On", "2": "Keep Warm", "3": "Turn Off"}
 OVEN_COMPLETE_ACTION_NAME_TO_SERVICE = {"Stay On": "stay_on", "Keep Warm": "keep_warm", "Turn Off": "turn_off"}
-OVEN_COMPLETE_ACTION_CODE_TO_SERVICE = {code: OVEN_COMPLETE_ACTION_NAME_TO_SERVICE[name] for code, name in OVEN_COMPLETE_ACTION_CODE_TO_NAME.items()}
-OVEN_COMPLETE_ACTION_NAME_TO_CODE = {name: code for code, name in OVEN_COMPLETE_ACTION_CODE_TO_NAME.items()}
-LIMITED_OVEN_MODE_OPTIONS_BY_MODEL = {"WOC54EC0HS00": ["Bake", "Broil", "Keep Warm"]}
-LIMITED_OVEN_MODE_OPTIONS_BY_DDM = {"DDM_COOKING_MINERVA_COMBO_BIO5_V1": ["Bake", "Broil", "Keep Warm"]}
+REFRIGERATOR_TEMP_MAP = {-4: "12", -2: "11", 0: "10", 3: "9", 5: "8"}
+REFRIGERATOR_TEMP_MAP_REVERSED = {value: str(key) for key, value in REFRIGERATOR_TEMP_MAP.items()}
 
 
 def _appliance_field(appliance: Mapping[str, Any], *keys: str) -> str | None:
@@ -62,16 +51,6 @@ def _appliance_field(appliance: Mapping[str, Any], *keys: str) -> str | None:
         if value not in (None, "", "0", 0):
             return str(value)
     return None
-
-
-def _supported_oven_mode_options(appliance: Mapping[str, Any]) -> list[str]:
-    model = _appliance_field(appliance, "MODEL_NO", "ModelNumber", "model", "modelNumber")
-    if model and model in LIMITED_OVEN_MODE_OPTIONS_BY_MODEL:
-        return LIMITED_OVEN_MODE_OPTIONS_BY_MODEL[model]
-    ddm = _appliance_field(appliance, "DATA_MODEL_KEY", "dataModelKey", "ddmKey")
-    if ddm and ddm in LIMITED_OVEN_MODE_OPTIONS_BY_DDM:
-        return LIMITED_OVEN_MODE_OPTIONS_BY_DDM[ddm]
-    return OVEN_MODE_OPTIONS
 
 
 def _parsed_ddm_for_appliance(coordinator, appliance: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -95,11 +74,39 @@ def _parsed_ddm_for_appliance(coordinator, appliance: Mapping[str, Any]) -> Mapp
     return None
 
 
-def _frozen_bake_defaults(coordinator, appliance: Mapping[str, Any], cavity: str | None, food: str) -> dict[str, Any]:
-    capability = cooking_cavity_capability(_parsed_ddm_for_appliance(coordinator, appliance), cavity)
+def _attr_supported(coordinator, appliance: Mapping[str, Any], attr: str, *, writable: bool = True) -> bool:
+    parsed = _parsed_ddm_for_appliance(coordinator, appliance)
+    if not isinstance(parsed, Mapping):
+        return False
+    key = "writable_attributes" if writable else "readable_attributes"
+    return attr in set(parsed.get(key) or [])
+
+
+def _cavity_capability(coordinator, appliance: Mapping[str, Any], cavity: str | None) -> Mapping[str, Any] | None:
+    return cooking_cavity_capability(_parsed_ddm_for_appliance(coordinator, appliance), cavity)
+
+
+def _supported_oven_mode_options(coordinator, appliance: Mapping[str, Any], cavity: str | None) -> list[str]:
+    capability = _cavity_capability(coordinator, appliance, cavity)
     if not isinstance(capability, Mapping):
-        return {}
-    frozen = capability.get("frozen_bake")
+        return []
+    presets = capability.get("supported_presets")
+    if not isinstance(presets, list):
+        return []
+    return [str(preset) for preset in presets if str(preset) in OVEN_MODE_NAME_TO_SERVICE and str(preset) != "Standby"]
+
+
+def _frozen_bake_options(coordinator, appliance: Mapping[str, Any], cavity: str | None) -> list[str]:
+    capability = _cavity_capability(coordinator, appliance, cavity)
+    frozen = capability.get("frozen_bake") if isinstance(capability, Mapping) else None
+    foods = frozen.get("foods") if isinstance(frozen, Mapping) else None
+    options = [str(item.get("food")).replace("_", " ").title() for item in foods or [] if isinstance(item, Mapping) and item.get("food")]
+    return ["None", *options] if options else []
+
+
+def _frozen_bake_defaults(coordinator, appliance: Mapping[str, Any], cavity: str | None, food: str) -> dict[str, Any]:
+    capability = _cavity_capability(coordinator, appliance, cavity)
+    frozen = capability.get("frozen_bake") if isinstance(capability, Mapping) else None
     food_by_name = frozen.get("food_by_name") if isinstance(frozen, Mapping) else None
     details = food_by_name.get(food) if isinstance(food_by_name, Mapping) else None
     if not isinstance(details, Mapping):
@@ -128,7 +135,7 @@ def _frozen_bake_defaults(coordinator, appliance: Mapping[str, Any], cavity: str
 
 
 def _cavity_prefix(cavity: str | None) -> str:
-    return "OvenLowerCavity" if cavity == "lower" else "OvenUpperCavity"
+    return "OvenLowerCavity" if str(cavity).lower().startswith("lower") else "OvenUpperCavity"
 
 
 async def _send_oven_options(entity: WhirlpoolApkEntity, cavity: str | None, options: Mapping[str, Any]) -> None:
@@ -137,7 +144,6 @@ async def _send_oven_options(entity: WhirlpoolApkEntity, cavity: str | None, opt
     if active and frozen_or_custom_cycle(entity.flat_status, cavity):
         raise ServiceValidationError(translation_domain=DOMAIN, translation_key="modify_not_allowed")
     attrs = oven_cook_attrs(cavity=cavity, temperature=float(options["target_temp"]), mode=str(options["mode"]), cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")), delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")), complete_action=str(options["complete_action"]), operation="4" if active else "2")
-    _LOGGER.debug("Applying Whirlpool oven attrs from select entity: entity=%s said=%s cavity=%s attrs=%s", entity.entity_id, entity.said, cavity, summarize(attrs))
     entity._check_service_request(await entity.client.send_attributes(entity.said, attrs))
     await entity.coordinator.async_request_refresh()
 
@@ -150,16 +156,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
             continue
         if is_cooking_appliance(appliance):
             flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
-            if oven_cavity_exists(flat, "upper"):
-                entities += [WhirlpoolOvenModeSelect(coordinator, appliance, "upper"), WhirlpoolOvenCompleteActionSelect(coordinator, appliance, "upper"), WhirlpoolFrozenBakePresetSelect(coordinator, appliance, "upper"), WhirlpoolCleanModeSelect(coordinator, appliance, "upper")]
-            if oven_cavity_exists(flat, "lower"):
-                entities += [WhirlpoolOvenModeSelect(coordinator, appliance, "lower"), WhirlpoolOvenCompleteActionSelect(coordinator, appliance, "lower"), WhirlpoolFrozenBakePresetSelect(coordinator, appliance, "lower"), WhirlpoolCleanModeSelect(coordinator, appliance, "lower")]
-            entities += [
-                WhirlpoolSimpleAttributeSelect(coordinator, appliance, "display_language", "Sys_DisplaySetLanguage", DISPLAY_LANGUAGE_NAME_TO_CODE, DISPLAY_LANGUAGE_CODE_TO_NAME, "mdi:translate"),
-                WhirlpoolSimpleAttributeSelect(coordinator, appliance, "temperature_units", "Sys_DisplaySetTempUnits", TEMPERATURE_UNITS_NAME_TO_CODE, TEMPERATURE_UNITS_CODE_TO_NAME, "mdi:thermometer-lines"),
-                WhirlpoolSimpleAttributeSelect(coordinator, appliance, "keypress_tone_volume", "Sys_OperationSetKeyPressToneVolume", TONE_VOLUME_NAME_TO_CODE, TONE_VOLUME_CODE_TO_NAME, "mdi:volume-high"),
-                WhirlpoolSimpleAttributeSelect(coordinator, appliance, "alert_tone_volume", "Sys_OperationSetAlertToneVolume", TONE_VOLUME_NAME_TO_CODE, TONE_VOLUME_CODE_TO_NAME, "mdi:bell-ring"),
-            ]
+            for cavity in ("upper", "lower"):
+                if not oven_cavity_exists(flat, cavity):
+                    continue
+                if _supported_oven_mode_options(coordinator, appliance, cavity):
+                    entities.append(WhirlpoolOvenModeSelect(coordinator, appliance, cavity))
+                    entities.append(WhirlpoolOvenCompleteActionSelect(coordinator, appliance, cavity))
+                if _frozen_bake_options(coordinator, appliance, cavity):
+                    entities.append(WhirlpoolFrozenBakePresetSelect(coordinator, appliance, cavity))
+                if _attr_supported(coordinator, appliance, f"{_cavity_prefix(cavity)}_CycleSetCleanOvenMode"):
+                    entities.append(WhirlpoolCleanModeSelect(coordinator, appliance, cavity))
+            for key, attr, name_to_code, code_to_name, icon in (
+                ("display_language", "Sys_DisplaySetLanguage", DISPLAY_LANGUAGE_NAME_TO_CODE, DISPLAY_LANGUAGE_CODE_TO_NAME, "mdi:translate"),
+                ("temperature_units", "Sys_DisplaySetTempUnits", TEMPERATURE_UNITS_NAME_TO_CODE, TEMPERATURE_UNITS_CODE_TO_NAME, "mdi:thermometer-lines"),
+                ("keypress_tone_volume", "Sys_OperationSetKeyPressToneVolume", TONE_VOLUME_NAME_TO_CODE, TONE_VOLUME_CODE_TO_NAME, "mdi:volume-high"),
+                ("alert_tone_volume", "Sys_OperationSetAlertToneVolume", TONE_VOLUME_NAME_TO_CODE, TONE_VOLUME_CODE_TO_NAME, "mdi:bell-ring"),
+            ):
+                if _attr_supported(coordinator, appliance, attr):
+                    entities.append(WhirlpoolSimpleAttributeSelect(coordinator, appliance, key, attr, name_to_code, code_to_name, icon))
             if microwave_exists(flat):
                 entities += [WhirlpoolMicrowaveModeSelect(coordinator, appliance), WhirlpoolMicrowavePresetSelect(coordinator, appliance), WhirlpoolMicrowaveDonenessSelect(coordinator, appliance)]
         else:
@@ -208,7 +222,8 @@ class WhirlpoolOvenModeSelect(WhirlpoolApkEntity, SelectEntity):
     _attr_translation_key = "oven_cook_mode"
     def __init__(self, coordinator, appliance: Mapping[str, Any], cavity: str | None) -> None:
         self.cavity = cavity
-        self._attr_options = _supported_oven_mode_options(appliance)
+        self._attr_options = _supported_oven_mode_options(coordinator, appliance, cavity)
+        self._default_option = self._attr_options[0] if self._attr_options else None
         suffix = f"{cavity}_cook_mode_select" if cavity else "cook_mode_select"
         super().__init__(coordinator, appliance, suffix)
         self._attr_name = entity_name_from_key(suffix, appliance)
@@ -222,17 +237,13 @@ class WhirlpoolOvenModeSelect(WhirlpoolApkEntity, SelectEntity):
                 if mapped == service:
                     return name
         if not oven_is_active(self.flat_status, self.cavity):
-            return "Bake"
+            return self._default_option
         raw = attr_value(self.flat_status, f"{_cavity_prefix(self.cavity)}_CycleSetCommonMode")
-        return OVEN_MODE_CODE_TO_NAME.get(str(raw), f"Mode {raw}") if raw is not None else "Bake"
+        return OVEN_MODE_CODE_TO_NAME.get(str(raw), f"Mode {raw}") if raw is not None else self._default_option
 
     async def async_select_option(self, option: str) -> None:
-        if option not in OVEN_MODE_NAME_TO_CODE:
+        if option not in self.options or option not in OVEN_MODE_NAME_TO_SERVICE:
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
-        if option == "Standby":
-            self._check_service_request(await self.client.stop_oven_cavity(self.said, self.cavity))
-            await self.coordinator.async_request_refresh()
-            return
         mode = OVEN_MODE_NAME_TO_SERVICE[option]
         if oven_is_active(self.flat_status, self.cavity):
             options = current_oven_options(self.coordinator, self.said, self.cavity, self.flat_status)
@@ -248,7 +259,7 @@ class WhirlpoolFrozenBakePresetSelect(WhirlpoolApkEntity, SelectEntity):
     _attr_translation_key = "frozen_bake_preset"
     def __init__(self, coordinator, appliance: Mapping[str, Any], cavity: str | None) -> None:
         self.cavity = cavity
-        self._attr_options = FROZEN_BAKE_FOOD_OPTIONS
+        self._attr_options = _frozen_bake_options(coordinator, appliance, cavity)
         suffix = f"{cavity}_frozen_bake_preset" if cavity else "frozen_bake_preset"
         super().__init__(coordinator, appliance, suffix)
         self._attr_name = entity_name_from_key(suffix, appliance)
@@ -259,7 +270,7 @@ class WhirlpoolFrozenBakePresetSelect(WhirlpoolApkEntity, SelectEntity):
         return str(food).replace("_", " ").title() if food else "None"
 
     async def async_select_option(self, option: str) -> None:
-        if option not in FROZEN_BAKE_FOOD_OPTIONS:
+        if option not in self.options:
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
         if oven_is_active(self.flat_status, self.cavity):
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="modify_not_allowed")
@@ -327,8 +338,8 @@ class WhirlpoolSimpleAttributeSelect(WhirlpoolApkEntity, SelectEntity):
 class WhirlpoolMicrowaveModeSelect(WhirlpoolApkEntity, SelectEntity):
     _attr_translation_key = "microwave_mode"
     _attr_icon = "mdi:microwave"
+    _attr_options = MWO_MODE_OPTIONS
     def __init__(self, coordinator, appliance: Mapping[str, Any]) -> None:
-        self._attr_options = MWO_MODE_OPTIONS
         super().__init__(coordinator, appliance, "microwave_mode")
         self._attr_name = entity_name_from_key("microwave_mode", appliance)
 
@@ -372,8 +383,8 @@ class WhirlpoolMicrowavePresetSelect(WhirlpoolApkEntity, SelectEntity):
 class WhirlpoolMicrowaveDonenessSelect(WhirlpoolApkEntity, SelectEntity):
     _attr_translation_key = "microwave_doneness"
     _attr_icon = "mdi:tune"
+    _attr_options = list(MWO_DONENESS_NAME_TO_CODE)
     def __init__(self, coordinator, appliance: Mapping[str, Any]) -> None:
-        self._attr_options = list(MWO_DONENESS_NAME_TO_CODE)
         super().__init__(coordinator, appliance, "microwave_doneness")
         self._attr_name = entity_name_from_key("microwave_doneness", appliance)
 
@@ -406,15 +417,7 @@ class WhirlpoolCycleSelect(WhirlpoolApkEntity, SelectEntity):
     def options(self) -> list[str]:
         value = find_key(self.flat_status, ("availableCycles", "cycles", "supportedCycles"))
         if isinstance(value, list):
-            opts: list[str] = []
-            for item in value:
-                if isinstance(item, Mapping):
-                    name = item.get("name") or item.get("cycleName") or item.get("id")
-                    if name:
-                        opts.append(str(name))
-                elif item is not None:
-                    opts.append(str(item))
-            return opts
+            return [str(item.get("name") or item.get("cycleName") or item.get("id") if isinstance(item, Mapping) else item) for item in value if item is not None]
         return []
 
     @property
@@ -430,7 +433,6 @@ class WhirlpoolCycleSelect(WhirlpoolApkEntity, SelectEntity):
 class WhirlpoolRefrigeratorTemperatureSelect(WhirlpoolApkEntity, SelectEntity):
     _attr_translation_key = "refrigerator_temperature_level"
     _attr_options = [str(option) for option in REFRIGERATOR_TEMP_MAP]
-    _attr_unit_of_measurement = UnitOfTemperature.CELSIUS
     def __init__(self, coordinator, appliance: Mapping[str, Any]) -> None:
         super().__init__(coordinator, appliance, "refrigerator_temperature_level")
         self._attr_name = entity_name_from_key("refrigerator_temperature_level")
