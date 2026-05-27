@@ -43,7 +43,6 @@ PLATFORMS = [
     Platform.LOCK,
     Platform.NUMBER,
     Platform.SELECT,
-    Platform.TIME,
     Platform.UPDATE,
 ]
 
