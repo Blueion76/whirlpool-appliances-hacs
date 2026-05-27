@@ -134,7 +134,6 @@ def _appliance_said_from_device(hass: HomeAssistant, device_id: str) -> str | No
     if not device:
         return None
 
-    # WhirlpoolApkEntity creates devices with identifiers={(DOMAIN, said)}.
     for domain, identifier in device.identifiers:
         if domain == DOMAIN and identifier:
             return str(identifier)
@@ -171,12 +170,13 @@ def _service_result(result: Any) -> dict[str, Any]:
     _LOGGER.debug("Whirlpool service command result accepted: %s", summarize(result))
     return {"result": result}
 
+
 def _service_bool(call: ServiceCall, key: str = "enabled") -> bool:
     """Return a service boolean, accepting legacy 'on' for YAML/backward compatibility."""
     if key in call.data:
         return bool(call.data[key])
     if "on" in call.data:
-        return bool(_service_bool(call))
+        return bool(call.data["on"])
     raise HomeAssistantError(f"Missing required boolean field: {key}")
 
 
@@ -319,6 +319,20 @@ def _register_services(hass: HomeAssistant) -> None:
     async def set_time_auto_update(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         result = await client.set_time_auto_update(_service_said(hass, call), call.data["enabled"], call.data.get("timezone"))
+        await _first_coordinator(hass).async_request_refresh()
+        return _service_result(result)
+
+    async def set_timezone(call: ServiceCall) -> dict[str, Any]:
+        client = _first_client(hass)
+        timezone = str(call.data["timezone"])
+        result = await client.send_attributes(
+            _service_said(hass, call),
+            {
+                "TimeZoneId": timezone,
+                "TimezoneId": timezone,
+                "XCat_TimeZoneId": timezone,
+            },
+        )
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
@@ -506,6 +520,13 @@ def _register_services(hass: HomeAssistant) -> None:
         schema=vol.Schema({vol.Optional("appliance_device"): str, vol.Optional("said"): str, vol.Required("enabled"): bool, vol.Optional("timezone"): str}),
         supports_response=SupportsResponse.OPTIONAL,
     )
+    hass.services.async_register(
+        DOMAIN,
+        "set_timezone",
+        set_timezone,
+        schema=vol.Schema({vol.Optional("appliance_device"): str, vol.Optional("said"): str, vol.Required("timezone"): str}),
+        supports_response=SupportsResponse.OPTIONAL,
+    )
     hass.services.async_register(DOMAIN, "refresh", refresh)
     hass.services.async_register(
         DOMAIN,
@@ -541,6 +562,7 @@ def _unregister_services(hass: HomeAssistant) -> None:
         "check_firmware_update",
         "sync_time",
         "set_time_auto_update",
+        "set_timezone",
         "refresh",
         "refresh_ddm_capabilities",
         "appliance_function",
