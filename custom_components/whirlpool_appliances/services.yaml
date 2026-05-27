@@ -106,10 +106,10 @@ oven_control:
       required: false
       selector:
         number:
-          min: 0
-          max: 300
-          step: 0.1
-          unit_of_measurement: °C
+          min: 175
+          max: 550
+          step: 5
+          unit_of_measurement: °F
     mode:
       name: Mode
       required: false

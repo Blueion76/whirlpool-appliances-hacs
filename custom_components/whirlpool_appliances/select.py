@@ -114,7 +114,8 @@ def _frozen_bake_defaults(coordinator, appliance: Mapping[str, Any], cavity: str
     updates: dict[str, Any] = {}
     target = details.get("target_temperature")
     if isinstance(target, Mapping) and target.get("default_c") is not None:
-        updates["target_temp"] = float(target["default_c"])
+        # DDM capability defaults are Celsius, but legacy oven commands use Fahrenheit.
+        updates["target_temp"] = round(float(target["default_c"]) * 9 / 5 + 32)
     cook_time = details.get("cook_time")
     if isinstance(cook_time, Mapping) and cook_time.get("default") is not None:
         try:

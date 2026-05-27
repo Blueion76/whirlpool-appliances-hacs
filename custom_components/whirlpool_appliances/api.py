@@ -779,9 +779,9 @@ class WhirlpoolCloudClient:
     ) -> Any:
         """Start/modify a Whirlpool legacy oven cavity cook cycle.
 
-        Temperature is Celsius and is converted to Whirlpool tenths-of-Celsius.
-        Optional cook time, delay time, and completion action are sourced from
-        the DDM CapabilityData when available.
+        Temperature is Fahrenheit and is converted to Whirlpool tenths-of-Fahrenheit
+        for legacy oven cavity commands. Optional cook time, delay time, and
+        completion action are sourced from the DDM CapabilityData when available.
         """
         prefix = self._cavity_prefix(cavity)
         mode_map = {
@@ -820,7 +820,7 @@ class WhirlpoolCloudClient:
             f"{prefix}_OpSetOperations": "2",
         }
         _LOGGER.debug(
-            "Preparing Whirlpool oven cook command: said=%s cavity=%s mode=%s code=%s target_c=%s cook_time_seconds=%s delay_time_seconds=%s complete_action=%s code=%s",
+            "Preparing Whirlpool oven cook command: said=%s cavity=%s mode=%s code=%s target_f=%s cook_time_seconds=%s delay_time_seconds=%s complete_action=%s code=%s",
             said,
             cavity or "upper",
             mode,
@@ -849,7 +849,10 @@ class WhirlpoolCloudClient:
         *,
         complete_action: str = "turn_off",
     ) -> Any:
-        """Start a Whirlpool Frozen Bake automatic oven cycle."""
+        """Start a Whirlpool Frozen Bake automatic oven cycle.
+
+        Temperature is Fahrenheit and is sent as tenths-of-Fahrenheit.
+        """
         prefix = self._cavity_prefix(cavity)
         food_map = {
             "meals": "2",
@@ -883,7 +886,7 @@ class WhirlpoolCloudClient:
             f"{prefix}_OpSetOperations": "2",
         }
         _LOGGER.debug(
-            "Preparing Whirlpool Frozen Bake command: said=%s cavity=%s food=%s code=%s target_c=%s cook_time_seconds=%s complete_action=%s code=%s",
+            "Preparing Whirlpool Frozen Bake command: said=%s cavity=%s food=%s code=%s target_f=%s cook_time_seconds=%s complete_action=%s code=%s",
             said,
             cavity or "upper",
             food,

@@ -163,8 +163,10 @@ async def async_setup_entry(
 class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, WhirlpoolWholeNumberEntity):
     """Pending oven target temperature selector.
 
-    Native value is Celsius. Home Assistant can convert/display it in the
-    user's preferred unit because this is a temperature number entity.
+    Whirlpool oven target-temperature command/status values for this legacy
+    cooking API are tenths of Fahrenheit. Expose Fahrenheit as the native unit so
+    Home Assistant can convert the frontend display/input for users that prefer
+    Celsius, while commands still send the oven's native wire unit.
     """
 
     def __init__(self, coordinator, appliance: Mapping[str, object], cavity: str | None) -> None:
@@ -175,10 +177,10 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, WhirlpoolWholeNumberE
             key=suffix,
             translation_key=suffix,
             device_class=NumberDeviceClass.TEMPERATURE,
-            native_min_value=79,
-            native_max_value=288,
-            native_step=1,
-            native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+            native_min_value=175,
+            native_max_value=550,
+            native_step=5,
+            native_unit_of_measurement=UnitOfTemperature.FAHRENHEIT,
             mode=NumberMode.BOX,
         )
         self._attr_name = entity_name_from_key(suffix, appliance)
@@ -201,17 +203,17 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, WhirlpoolWholeNumberE
                 value = None
 
         if value is None and self.cavity in ("upper", "lower"):
-            value = 79.4
+            value = 175
         return round(float(value)) if value is not None else None
 
     async def async_set_native_value(self, value: float) -> None:
-        celsius = round(float(value))
+        fahrenheit = min(550, max(175, round(float(value) / 5) * 5))
         if self.cavity in ("upper", "lower") and oven_is_active(self.flat_status, self.cavity):
             options = current_oven_options(self.coordinator, self.said, self.cavity, self.flat_status)
-            options["target_temp"] = celsius
+            options["target_temp"] = fahrenheit
             await _send_oven_options(self, self.cavity, options)
             return
-        update_local_options(self.coordinator, self.said, self.cavity, target_temp=celsius)
+        update_local_options(self.coordinator, self.said, self.cavity, target_temp=fahrenheit)
         self.async_write_ha_state()
 
 

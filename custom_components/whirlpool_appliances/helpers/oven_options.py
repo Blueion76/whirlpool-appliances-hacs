@@ -124,8 +124,8 @@ def current_oven_options(coordinator, said: str, cavity: str | None, flat: Mappi
 
     mode_code = str(attr_value(flat, f"{prefix}_CycleSetCommonMode") or "")
     mode = OVEN_MODE_CODE_TO_SERVICE.get(mode_code, "bake")
-    # Idle/default oven setpoint: 175°F = 79.4°C.
-    target_temp = temp_from_tenths(attr_value(flat, f"{prefix}_CycleSetTargetTemp")) or 79.4
+    # Idle/default oven setpoint. Legacy oven temperature attrs are tenths of Fahrenheit.
+    target_temp = temp_from_tenths(attr_value(flat, f"{prefix}_CycleSetTargetTemp")) or 175
 
     action_code = str(attr_value(flat, f"{prefix}_OpSetCookTimeCompleteAction") or "3")
     complete_action = OVEN_COMPLETE_ACTION_CODE_TO_SERVICE.get(action_code, "turn_off")

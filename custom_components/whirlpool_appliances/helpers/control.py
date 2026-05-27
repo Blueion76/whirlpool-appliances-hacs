@@ -189,7 +189,7 @@ def oven_cook_attrs(
     complete_action: str = "turn_off",
     operation: str = "2",
 ) -> dict[str, str]:
-    """Build a legacy oven start/modify payload."""
+    """Build a legacy oven start/modify payload.\n\n    The legacy cooking command expects target temperature as tenths of\n    Fahrenheit for oven cavities.\n    """
     prefix = cavity_prefix(cavity)
     selected = OVEN_MODE_SERVICE_TO_CODE.get(str(mode).lower())
     if selected is None:
