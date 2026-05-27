@@ -36,7 +36,6 @@ async def _set_power(client, said: str, on: bool):
     return await client.set_power(said, on)
 
 
-
 async def _set_remote_enable(client, said: str, on: bool):
     return await client.set_remote_enable(said, on)
 
@@ -55,6 +54,22 @@ async def _set_microwave_turntable(client, said: str, on: bool):
 
 async def _set_aircon_quiet_mode(client, said: str, on: bool):
     return await client.set_aircon_quiet_mode(said, on)
+
+
+async def _set_aircon_turbo_mode(client, said: str, on: bool):
+    return await client.set_aircon_turbo_mode(said, on)
+
+
+async def _set_aircon_eco_mode(client, said: str, on: bool):
+    return await client.set_aircon_eco_mode(said, on)
+
+
+async def _set_aircon_display_on(client, said: str, on: bool):
+    return await client.set_aircon_display_on(said, on)
+
+
+async def _set_aircon_horizontal_louver_swing(client, said: str, on: bool):
+    return await client.set_aircon_horizontal_louver_swing(said, on)
 
 
 async def _set_time_auto_update(client, said: str, on: bool):
