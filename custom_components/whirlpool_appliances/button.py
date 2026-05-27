@@ -1,7 +1,6 @@
 """Button entities for Whirlpool Appliances integration."""
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from collections.abc import Awaitable, Callable, Mapping
@@ -10,13 +9,23 @@ from typing import Any
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import WhirlpoolApkConfigEntry
 from .api import appliance_said
+from .const import DOMAIN
+from .control_helpers import (
+    frozen_or_custom_cycle,
+    microwave_attrs,
+    microwave_local_options,
+    oven_cook_attrs,
+    oven_is_active,
+    raise_if_common_blocked,
+)
 from .entity import WhirlpoolApkEntity, entity_name_from_key, is_cooking_appliance, microwave_exists, oven_cavity_exists
-from .oven_options import current_oven_options, minutes_to_seconds, oven_is_active
 from .logging_utils import summarize
+from .oven_options import current_oven_options, minutes_to_seconds
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,6 +71,10 @@ async def _start_lower_oven(entity, said: str):
     return await entity.async_start_oven()
 
 
+async def _start_microwave(entity, said: str):
+    return await entity.async_start_microwave()
+
+
 async def _stop_kitchen_timer(client, said: str):
     return await client.stop_kitchen_timer(said, 1)
 
@@ -90,9 +103,9 @@ COOKING_BUTTONS = (
     WhirlpoolButtonDescription(key="start_lower_oven", translation_key="start_lower_oven", icon="mdi:play", press_fn=_start_lower_oven),
     WhirlpoolButtonDescription(key="stop_upper_oven", translation_key="stop_upper_oven", icon="mdi:stop", press_fn=_stop_upper_oven),
     WhirlpoolButtonDescription(key="stop_lower_oven", translation_key="stop_lower_oven", icon="mdi:stop", press_fn=_stop_lower_oven),
+    WhirlpoolButtonDescription(key="start_microwave", translation_key="start_microwave", icon="mdi:play", press_fn=_start_microwave),
     WhirlpoolButtonDescription(key="stop_microwave", translation_key="stop_microwave", icon="mdi:stop", press_fn=_stop_microwave),
 )
-
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
@@ -116,11 +129,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
                     continue
                 if (desc.key.startswith("start_lower") or desc.key.startswith("stop_lower")) and not oven_cavity_exists(flat, "lower"):
                     continue
-                if desc.key == "stop_microwave" and not has_mwo:
+                if desc.key in {"start_microwave", "stop_microwave"} and not has_mwo:
                     continue
-                if desc.key.startswith("start_"):
+                if desc.key.startswith("start_upper") or desc.key.startswith("start_lower"):
                     cavity = "lower" if "lower" in desc.key else "upper"
                     entities.append(WhirlpoolStartOvenButton(coordinator, appliance, desc, cavity))
+                elif desc.key == "start_microwave":
+                    entities.append(WhirlpoolStartMicrowaveButton(coordinator, appliance, desc))
                 else:
                     entities.append(WhirlpoolApkButton(coordinator, appliance, desc))
     async_add_entities(entities)
@@ -144,9 +159,8 @@ class WhirlpoolApkButton(WhirlpoolApkEntity, ButtonEntity):
         await self.coordinator.async_request_refresh()
 
 
-
 class WhirlpoolStartOvenButton(WhirlpoolApkButton):
-    """Start oven using locally selected temp/mode/timing/preset options."""
+    """Start or modify oven using locally selected temp/mode/timing/preset options."""
 
     def __init__(self, coordinator, appliance: Mapping[str, Any], description: WhirlpoolButtonDescription, cavity: str) -> None:
         self.cavity = cavity
@@ -167,12 +181,20 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
 
     async def async_start_oven(self) -> Any:
         options = current_oven_options(self.coordinator, self.said, self.cavity, self.flat_status)
-        _LOGGER.debug("Whirlpool Start Oven options: said=%s cavity=%s options=%s active=%s", self.said, self.cavity, summarize(options), oven_is_active(self.flat_status, self.cavity))
-        if oven_is_active(self.flat_status, self.cavity):
-            self._check_service_request(await self.client.stop_oven_cavity(self.said, self.cavity))
-            await asyncio.sleep(1)
+        active = oven_is_active(self.flat_status, self.cavity)
+        _LOGGER.debug("Whirlpool Start Oven options: said=%s cavity=%s options=%s active=%s", self.said, self.cavity, summarize(options), active)
+
+        raise_if_common_blocked(self.flat_status, cavity=self.cavity)
+
+        if active and frozen_or_custom_cycle(self.flat_status, self.cavity):
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="modify_not_allowed")
+
+        if active and options.get("delay_time_minutes"):
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="delay_change_not_allowed")
 
         if options.get("frozen_food"):
+            if active:
+                raise ServiceValidationError(translation_domain=DOMAIN, translation_key="modify_not_allowed")
             return await self.client.set_oven_frozen_bake(
                 self.said,
                 str(options["frozen_food"]),
@@ -182,12 +204,32 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
                 complete_action=str(options["complete_action"]),
             )
 
-        return await self.client.set_oven_cook(
-            self.said,
-            float(options["target_temp"]),
-            str(options["mode"]),
-            self.cavity,
+        attrs = oven_cook_attrs(
+            cavity=self.cavity,
+            temperature=float(options["target_temp"]),
+            mode=str(options["mode"]),
             cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")),
             delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
             complete_action=str(options["complete_action"]),
+            operation="4" if active else "2",
         )
+        _LOGGER.debug("Final Whirlpool oven %s attributes: said=%s cavity=%s attrs=%s", "modify" if active else "start", self.said, self.cavity, summarize(attrs))
+        return await self.client.send_attributes(self.said, attrs)
+
+
+class WhirlpoolStartMicrowaveButton(WhirlpoolApkButton):
+    """Send the pending microwave command to the appliance display."""
+
+    async def async_press(self) -> None:
+        _LOGGER.debug("Pressing Whirlpool Start Microwave button: entity=%s said=%s", self.entity_id, self.said)
+        result = await self.async_start_microwave()
+        _LOGGER.debug("Whirlpool Start Microwave result: entity=%s result=%s", self.entity_id, summarize(result))
+        self._check_service_request(result)
+        await self.coordinator.async_request_refresh()
+
+    async def async_start_microwave(self) -> Any:
+        raise_if_common_blocked(self.flat_status, microwave=True)
+        options = microwave_local_options(self.coordinator, self.said)
+        attrs = microwave_attrs(options)
+        _LOGGER.debug("Final Whirlpool microwave SetOnDisplay attributes: said=%s options=%s attrs=%s", self.said, summarize(options), summarize(attrs))
+        return await self.client.send_attributes(self.said, attrs)
