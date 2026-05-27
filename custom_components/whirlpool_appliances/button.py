@@ -16,7 +16,6 @@ from . import WhirlpoolApkConfigEntry
 from .api import appliance_said
 from .const import DOMAIN
 from .helpers.control import (
-    frozen_or_custom_cycle,
     microwave_attrs,
     microwave_local_options,
     oven_cook_attrs,
@@ -183,13 +182,10 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
         active = oven_is_active(self.flat_status, self.cavity)
         _LOGGER.debug("Whirlpool Start Oven options: said=%s cavity=%s options=%s active=%s", self.said, self.cavity, summarize(options), active)
 
+        # Keep only reliable local safety checks. Do not veto oven start/modify
+        # based on stale cycle/timing state; let the Whirlpool cloud/appliance
+        # accept or reject the same payload used by the oven_control service.
         raise_if_common_blocked(self.flat_status, cavity=self.cavity)
-
-        if active and frozen_or_custom_cycle(self.flat_status, self.cavity):
-            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="modify_not_allowed")
-
-        if active and options.get("delay_time_minutes"):
-            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="delay_change_not_allowed")
 
         if options.get("frozen_food"):
             if active:
@@ -210,9 +206,9 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
             cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")),
             delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
             complete_action=str(options["complete_action"]),
-            operation="4" if active else "3",
+            operation="4" if active else "2",
         )
-        _LOGGER.debug("Final Whirlpool oven %s attributes: said=%s cavity=%s attrs=%s", "modify" if active else "set_on_display", self.said, self.cavity, summarize(attrs))
+        _LOGGER.debug("Final Whirlpool oven %s attributes: said=%s cavity=%s attrs=%s", "modify" if active else "start", self.said, self.cavity, summarize(attrs))
         return await self.client.send_attributes(self.said, attrs)
 
 
