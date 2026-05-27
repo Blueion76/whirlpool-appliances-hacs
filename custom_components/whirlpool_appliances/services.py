@@ -254,6 +254,7 @@ async def _feature_response(hass: HomeAssistant, call: ServiceCall) -> Any:
     action = str(call.data["action"])
     params = dict(call.data.get("params") or {}) or None
     body = call.data.get("body")
+    accessory_headers = _accessory_headers(client)
 
     if action == "update_appliances":
         result = await client.request("POST", "/api/v2/updateAppliances", json=body)
@@ -262,37 +263,37 @@ async def _feature_response(hass: HomeAssistant, call: ServiceCall) -> Any:
     if action == "get_ddm_content":
         return await client.request("GET", f"/api/v1/contents/all/{call.data['ddm_key']}")
     if action == "get_accessories":
-        return await client.request("GET", "/api/v1/accessory")
+        return await client.request("GET", "/api/v1/accessory", extra_headers=accessory_headers)
     if action == "get_accessory_status":
-        return await client.request("GET", f"/api/v1/accessory/{call.data['serial_number']}")
+        return await client.request("GET", f"/api/v1/accessory/{call.data['serial_number']}", extra_headers=accessory_headers)
     if action == "get_accessory_cycle_history":
-        return await client.request("GET", "/api/v1/accessory/cycle-history", params=params)
+        return await client.request("GET", "/api/v1/accessory/cycle-history", params=params, extra_headers=accessory_headers)
     if action == "get_accessory_cycle":
-        return await client.request("GET", f"/api/v1/accessory/cycle-history/{call.data['cycle_id']}")
+        return await client.request("GET", f"/api/v1/accessory/cycle-history/{call.data['cycle_id']}", extra_headers=accessory_headers)
     if action == "get_accessory_cycle_lifecycle":
-        return await client.request("GET", "/api/v1/accessory/cycle-history/lifecycle/", params=params)
+        return await client.request("GET", "/api/v1/accessory/cycle-history/lifecycle/", params=params, extra_headers=accessory_headers)
     if action == "get_accessory_favorites":
-        return await client.request("GET", "/api/v1/accessory/cycle-history/favorites", params=params)
+        return await client.request("GET", "/api/v1/accessory/cycle-history/favorites", params=params, extra_headers=accessory_headers)
     if action == "save_accessory_cycle_favorite":
-        return await client.request("POST", f"/api/v1/accessory/cycle-history/favorites/{call.data['cycle_id']}", json=body)
+        return await client.request("POST", f"/api/v1/accessory/cycle-history/favorites/{call.data['cycle_id']}", json=body, extra_headers=accessory_headers)
     if action == "delete_accessory_favorite":
-        return await client.request("DELETE", f"/api/v1/accessory/cycle-history/favorites/delete/{call.data['favorite_id']}")
+        return await client.request("DELETE", f"/api/v1/accessory/cycle-history/favorites/delete/{call.data['favorite_id']}", extra_headers=accessory_headers)
     if action == "rename_accessory_favorite":
         payload = dict(body or {})
         if call.data.get("favorite_name") is not None:
             payload.setdefault("name", call.data["favorite_name"])
-        return await client.request("PUT", f"/api/v1/accessory/cycle-history/favorites/name/{call.data['cycle_id']}", json=payload)
+        return await client.request("PUT", f"/api/v1/accessory/cycle-history/favorites/name/{call.data['cycle_id']}", json=payload, extra_headers=accessory_headers)
     if action == "update_accessory_favorite_notes":
         payload = dict(body or {})
         if call.data.get("notes") is not None:
             payload.setdefault("notes", call.data["notes"])
-        return await client.request("PUT", f"/api/v1/accessory/cycle-history/favorites/notes/{call.data['favorite_id']}", json=payload)
+        return await client.request("PUT", f"/api/v1/accessory/cycle-history/favorites/notes/{call.data['favorite_id']}", json=payload, extra_headers=accessory_headers)
     if action == "get_accessory_expert_cycle":
-        return await client.request("GET", f"/api/v1/accessory/expert/cycle/{call.data['cycle_id']}")
+        return await client.request("GET", f"/api/v1/accessory/expert/cycle/{call.data['cycle_id']}", extra_headers=accessory_headers)
     if action == "enable_accessory_range_extender":
-        return await client.request("POST", f"/api/v1/accessory/rangeextender/enable/{call.data['cycle_id']}", json=body)
+        return await client.request("POST", f"/api/v1/accessory/rangeextender/enable/{call.data['cycle_id']}", json=body, extra_headers=accessory_headers)
     if action == "get_accessory_ota_status":
-        return await client.request("GET", "/api/v1/accessory/ota")
+        return await client.request("GET", "/api/v1/accessory/ota", extra_headers=accessory_headers)
     if action == "get_notification_subscriptions":
         return await client.request("GET", "/api/v2/notifications/subscriptions/multi", params=params)
     if action == "get_notification_device":
@@ -316,6 +317,25 @@ async def _feature_response(hass: HomeAssistant, call: ServiceCall) -> Any:
             return {"video_capability_hints": _video_hints(result), "raw": result}
         return result
     raise HomeAssistantError(f"Unsupported feature action: {action}")
+
+
+def _accessory_headers(client: WhirlpoolCloudClient) -> dict[str, str]:
+    """Return mobile-app headers required by accessory endpoints.
+
+    Accessory APIs reject the generic account region header with
+    `Invalid Header Region`. The mobile apps use a Whirlpool region group
+    (`NAR` for US/North America) plus a country header.
+    """
+    region = str(client.region or "US").upper()
+    whirlpool_region = {"US": "NAR", "EU": "EMEA"}.get(region, region)
+    return {
+        "WP-CLIENT-BRAND": str(client.brand),
+        "WP-CLIENT-COUNTRY": region,
+        "WP-CLIENT-REGION": whirlpool_region,
+        "x-client-brand": str(client.brand),
+        "x-client-country": region,
+        "x-client-region": whirlpool_region,
+    }
 
 
 def _video_hints(payload: Any) -> dict[str, Any]:
