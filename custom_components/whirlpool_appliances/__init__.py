@@ -35,6 +35,7 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
+    Platform.EVENT,
     Platform.CLIMATE,
     Platform.LIGHT,
     Platform.BUTTON,
