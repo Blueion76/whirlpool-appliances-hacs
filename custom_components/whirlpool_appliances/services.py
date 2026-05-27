@@ -320,21 +320,16 @@ async def _feature_response(hass: HomeAssistant, call: ServiceCall) -> Any:
 
 
 def _accessory_headers(client: WhirlpoolCloudClient) -> dict[str, str]:
-    """Return mobile-app headers required by accessory endpoints.
-
-    Accessory APIs reject the generic account region header with
-    `Invalid Header Region`. The mobile apps use a Whirlpool region group
-    (`NAR` for US/North America) plus a country header.
-    """
+    """Return mobile-app headers required by accessory endpoints."""
     region = str(client.region or "US").upper()
-    whirlpool_region = {"US": "NAR", "EU": "EMEA"}.get(region, region)
+    brand = str(client.brand)
     return {
-        "WP-CLIENT-BRAND": str(client.brand),
+        "WP-CLIENT-BRAND": brand,
         "WP-CLIENT-COUNTRY": region,
-        "WP-CLIENT-REGION": whirlpool_region,
-        "x-client-brand": str(client.brand),
+        "WP-CLIENT-REGION": region,
+        "x-client-brand": brand,
         "x-client-country": region,
-        "x-client-region": whirlpool_region,
+        "x-client-region": region,
     }
 
 
