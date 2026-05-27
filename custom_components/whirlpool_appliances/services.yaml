@@ -39,13 +39,13 @@ send_appliance_command:
   name: Send appliance command
   description: Send a raw Whirlpool appliance command.
   fields:
-    appliance_device: &id001
+    appliance_device: &appliance_device
       name: Appliance device
       required: false
       selector:
         device:
           integration: whirlpool_appliances
-    said: &id002
+    said: &said
       name: SAID
       required: false
       selector:
@@ -70,8 +70,8 @@ set_attributes:
   name: Set appliance attributes
   description: Set raw legacy SAID attributes through the Whirlpool command endpoint.
   fields:
-    appliance_device: *id001
-    said: *id002
+    appliance_device: *appliance_device
+    said: *said
     attributes:
       name: Attributes
       required: true
@@ -79,11 +79,10 @@ set_attributes:
         object: null
 oven_control:
   name: Oven control
-  description: Grouped oven action service for cooking, Frozen Bake, and stopping
-    a cavity.
+  description: Grouped oven action service for cooking, Frozen Bake, and stopping a cavity.
   fields:
-    appliance_device: *id001
-    said: *id002
+    appliance_device: *appliance_device
+    said: *said
     action:
       name: Action
       required: true
@@ -152,11 +151,10 @@ oven_control:
           - stay_on
 appliance_option:
   name: Appliance option
-  description: Grouped appliance option service for lights, quiet/remote, timers,
-    time, firmware check, and AC filter actions.
+  description: Grouped appliance option service for lights, quiet/remote, timers, time, firmware check, and AC filter actions.
   fields:
-    appliance_device: *id001
-    said: *id002
+    appliance_device: *appliance_device
+    said: *said
     action:
       name: Action
       required: true
@@ -235,8 +233,8 @@ history:
   name: History
   description: Fetch cycle or fault history.
   fields:
-    appliance_device: *id001
-    said: *id002
+    appliance_device: *appliance_device
+    said: *said
     action:
       name: Action
       required: true
@@ -262,8 +260,8 @@ favorites:
   name: Favorites
   description: Fetch or delete appliance saved/favorite cycles.
   fields:
-    appliance_device: *id001
-    said: *id002
+    appliance_device: *appliance_device
+    said: *said
     action:
       name: Action
       required: true
@@ -297,11 +295,10 @@ messages:
         text: null
 feature:
   name: Feature
-  description: Grouped feature service for DDM content, accessories, notifications,
-    TS OTA, documents, diagnostics, and video capability discovery.
+  description: Grouped feature service for DDM content, notifications, TS OTA, documents, diagnostics, and video capability discovery. Accessory endpoints are disabled.
   fields:
-    appliance_device: *id001
-    said: *id002
+    appliance_device: *appliance_device
+    said: *said
     action:
       name: Action
       required: true
@@ -310,19 +307,6 @@ feature:
           options:
           - update_appliances
           - get_ddm_content
-          - get_accessories
-          - get_accessory_status
-          - get_accessory_cycle_history
-          - get_accessory_cycle
-          - get_accessory_cycle_lifecycle
-          - get_accessory_favorites
-          - save_accessory_cycle_favorite
-          - delete_accessory_favorite
-          - rename_accessory_favorite
-          - update_accessory_favorite_notes
-          - get_accessory_expert_cycle
-          - enable_accessory_range_extender
-          - get_accessory_ota_status
           - get_notification_subscriptions
           - get_notification_device
           - get_ts_ota_status
@@ -344,31 +328,6 @@ feature:
         object: null
     ddm_key:
       name: DDM key
-      required: false
-      selector:
-        text: null
-    serial_number:
-      name: Serial number
-      required: false
-      selector:
-        text: null
-    cycle_id:
-      name: Cycle ID
-      required: false
-      selector:
-        text: null
-    favorite_id:
-      name: Favorite ID
-      required: false
-      selector:
-        text: null
-    favorite_name:
-      name: Favorite name
-      required: false
-      selector:
-        text: null
-    notes:
-      name: Notes
       required: false
       selector:
         text: null

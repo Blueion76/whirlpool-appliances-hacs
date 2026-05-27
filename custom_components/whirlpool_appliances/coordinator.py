@@ -30,6 +30,20 @@ def _has_attribute_payload(status: Any) -> bool:
     return isinstance(status, Mapping) and isinstance(status.get("attributes"), Mapping) and bool(status["attributes"])
 
 
+def _has_entity_safe_status(status: Any) -> bool:
+    """Return true when status is safe to expose to normal entities.
+
+    Legacy Whirlpool REST can return only claimStatus/online. That is useful
+    connectivity metadata but not enough for microwave/oven entities.
+    """
+    if _has_attribute_payload(status):
+        return True
+    if not isinstance(status, Mapping):
+        return False
+    keys = set(status)
+    return bool(keys - {"claimStatus", "online", "source", "stompHeaders", "stompReceivedAt", "pushEnvelope"})
+
+
 def _appliance_category(appliance: Mapping[str, Any], status: Any = None) -> str | None:
     for key in ("category", "applianceCategory", "SAID_TYPE", "applianceType", "type"):
         value = appliance.get(key)
@@ -267,19 +281,50 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         statuses[said] = state
                         continue
 
-                statuses[said] = await self._async_fetch_legacy_status(said)
+                rest_status = await self.client.get_status(said)
+                existing = self._latest_statuses.get(said)
+                push_state = self.legacy_push_manager.states.get(said)
+
+                # Use REST when it is a full/entity-safe status.
+                if _has_entity_safe_status(rest_status):
+                    status = rest_status
+                # Use WS as the live baseline only if it has real attributes.
+                elif _has_attribute_payload(push_state):
+                    _LOGGER.debug("Using Whirlpool legacy STOMP attributes as live baseline for %s", said)
+                    status = _merge_status(rest_status, push_state)
+                # Keep previous good status rather than blanking entities with claimStatus/online only.
+                elif _has_entity_safe_status(existing):
+                    _LOGGER.debug(
+                        "Keeping previous Whirlpool entity-safe status for %s because REST was shallow and WS has no attributes yet. rest_shape=%s push_shape=%s",
+                        said,
+                        summarize_keys(rest_status),
+                        summarize_keys(push_state),
+                    )
+                    status = _merge_status(existing, rest_status)
+                else:
+                    status = rest_status
+
+                statuses[said] = status
 
             for said, existing in self._latest_statuses.items():
                 if said not in statuses and existing is not None:
                     statuses[said] = existing
 
+            # Apply WS as a patch only when it is safe. Shallow/event-only WS payloads
+            # stay visible in legacy_push_states but do not blank entity state.
             for appliance in appliances:
                 said = appliance_said(appliance)
                 if not said:
                     continue
                 push_state = self.legacy_push_manager.states.get(said)
-                if self.legacy_push_manager.connected and push_state and _has_substantive_state(push_state):
+                if _has_attribute_payload(push_state) and _has_entity_safe_status(statuses.get(said)):
                     statuses[said] = _merge_status(statuses.get(said), push_state)
+                elif push_state and not _has_attribute_payload(push_state):
+                    _LOGGER.debug(
+                        "Stored Whirlpool legacy STOMP payload for %s but did not merge into entities because it has no attributes. shape=%s",
+                        said,
+                        summarize_keys(push_state),
+                    )
 
             self._latest_statuses = statuses
             await self.async_fetch_ddm_capabilities(appliances, statuses)
@@ -303,47 +348,6 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return data
         except WhirlpoolApiError as err:
             raise UpdateFailed(str(err)) from err
-
-    async def _async_fetch_legacy_status(self, said: str) -> Any:
-        """Fetch full legacy SAID status, forcing sync if status is shallow.
-
-        Some Whirlpool status reads can return only claimStatus/online. That is
-        not enough for entity state. When that happens, call the appliance sync
-        endpoint and then prefer whichever response contains an attributes map.
-        """
-        status = await self.client.get_status(said)
-        if _has_attribute_payload(status):
-            return status
-
-        _LOGGER.debug(
-            "Whirlpool status for %s did not include attributes; attempting appliance sync fallback. status_shape=%s",
-            said,
-            summarize_keys(status),
-        )
-
-        sync_result: Any = None
-        try:
-            sync_result = await self.client.sync_appliance(said)
-            if _has_attribute_payload(sync_result):
-                _LOGGER.debug("Whirlpool sync returned full attributes for %s", said)
-                return sync_result
-        except WhirlpoolApiError as err:
-            _LOGGER.debug("Whirlpool sync fallback failed for %s: %s", said, err)
-
-        try:
-            refreshed = await self.client.get_status(said)
-            if _has_attribute_payload(refreshed):
-                _LOGGER.debug("Whirlpool status returned full attributes for %s after sync fallback", said)
-                return refreshed
-        except WhirlpoolApiError as err:
-            _LOGGER.debug("Whirlpool status retry after sync failed for %s: %s", said, err)
-
-        existing = self._latest_statuses.get(said)
-        if _has_attribute_payload(existing):
-            _LOGGER.debug("Keeping previous full Whirlpool status for %s because fresh status was shallow", said)
-            return _merge_status(existing, status)
-
-        return status
 
     @staticmethod
     def _thing_saids(appliances: list[Mapping[str, Any]]) -> set[str]:
@@ -409,24 +413,25 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data(data)
 
     def _handle_legacy_push_state(self, said: str, state: dict[str, Any]) -> None:
-        """Handle legacy STOMP state callback.
-
-        Legacy STOMP messages are partial updates. Only merge them into entity
-        status when a full REST/sync baseline already exists.
-        """
+        """Handle legacy STOMP state callback without corrupting entities."""
         data = dict(self.data or {})
         statuses = dict(data.get("statuses") or {})
         baseline = statuses.get(said) or self._latest_statuses.get(said)
 
-        if _has_attribute_payload(baseline):
-            merged = _merge_status(baseline, state)
+        if _has_attribute_payload(state):
+            if _has_entity_safe_status(baseline):
+                merged = _merge_status(baseline, state)
+            else:
+                merged = state
             self._latest_statuses[said] = merged
             statuses[said] = merged
             data["statuses"] = statuses
+            _LOGGER.debug("Merged Whirlpool legacy STOMP attribute payload into status for %s", said)
         else:
             _LOGGER.debug(
-                "Received Whirlpool legacy STOMP state before full status baseline; storing push state only: said=%s",
+                "Received Whirlpool legacy STOMP payload without attributes; storing push payload only. said=%s shape=%s",
                 said,
+                summarize_keys(state),
             )
 
         data["legacy_push_states"] = self.legacy_push_manager.states

@@ -64,7 +64,6 @@ ACCESSORY_ACTIONS = {
 FEATURE_ACTIONS = {
     "update_appliances",
     "get_ddm_content",
-    *ACCESSORY_ACTIONS,
     "get_notification_subscriptions",
     "get_notification_device",
     "get_ts_ota_status",
@@ -258,12 +257,11 @@ async def _feature_response(hass: HomeAssistant, call: ServiceCall) -> Any:
     params = dict(call.data.get("params") or {}) or None
     body = call.data.get("body")
 
-    if action in ACCESSORY_ACTIONS and not _has_accessories(client):
+    if action in ACCESSORY_ACTIONS:
         return {
-            "status": "skipped",
+            "status": "disabled",
             "action": action,
-            "reason": "No accessories are reported by this Whirlpool account token.",
-            "accessories": [],
+            "reason": "Accessory endpoints are disabled because this account reports no accessories and Whirlpool returns Invalid Header Region.",
         }
 
     accessory_headers = _accessory_headers(client)

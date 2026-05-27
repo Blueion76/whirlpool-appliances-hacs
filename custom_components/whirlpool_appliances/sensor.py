@@ -393,7 +393,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
             entities.extend(WhirlpoolThingShieldSensor(coordinator, appliance, key) for key in THINGSHIELD_SENSOR_KEYS)
         if entry.options.get(CONF_EXPOSE_RAW_SENSORS, entry.data.get(CONF_EXPOSE_RAW_SENSORS, True)):
             entities.append(WhirlpoolRawStatusSensor(coordinator, appliance))
-    entities.extend(await _async_accessory_entities(coordinator))
+    # Accessory/probe entities disabled: this account reports no accessories and Whirlpool rejects the accessory endpoint.
     async_add_entities(entities)
 
 
