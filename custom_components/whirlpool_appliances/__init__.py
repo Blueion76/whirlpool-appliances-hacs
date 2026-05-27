@@ -5,7 +5,7 @@ import logging
 from typing import Any, TypeAlias
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_REGION, CONF_USERNAME, Platform, UnitOfTemperature
+from homeassistant.const import CONF_PASSWORD, CONF_REGION, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -81,7 +81,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry)
         DATA_COORDINATOR: coordinator,
     }
 
-    _patch_temperature_unit_preference()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     register_services(hass)
     return True
@@ -147,25 +146,3 @@ async def _async_update_listener(
 def _entry_option(entry: ConfigEntry, key: str, default: Any) -> Any:
     """Read option value with fallback to config entry data."""
     return entry.options.get(key, entry.data.get(key, default))
-
-
-def _patch_temperature_unit_preference() -> None:
-    """Make Whirlpool temperature entities follow Home Assistant's unit system.
-
-    Whirlpool legacy payloads report cooking temperatures in Celsius/tenths of
-    Celsius. Entity/native display should still follow the user's HA unit system
-    instead of the Whirlpool account region.
-    """
-    from .entity import WhirlpoolApkEntity, temperature_unit_for_region
-
-    def _preferred_temperature_unit(entity: WhirlpoolApkEntity) -> UnitOfTemperature:
-        try:
-            unit = entity.coordinator.hass.config.units.temperature_unit
-        except Exception:  # noqa: BLE001 - fall back to previous region behavior
-            unit = None
-        if unit in (UnitOfTemperature.CELSIUS, UnitOfTemperature.FAHRENHEIT):
-            return unit
-        region = getattr(entity.coordinator.client, "region", None)
-        return temperature_unit_for_region(region)
-
-    WhirlpoolApkEntity.temperature_unit = property(_preferred_temperature_unit)
