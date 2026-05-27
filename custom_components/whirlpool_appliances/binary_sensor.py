@@ -42,7 +42,7 @@ def _bool(raw: Any, *, truthy_extra: tuple[str, ...] = ()) -> bool | None:
     if raw is None:
         return None
     if isinstance(raw, str):
-        return raw.lower() in ("1", "true", "on", "open", "opened", "yes", "online", "connected", "running", *truthy_extra)
+        return raw.lower() in ("1", "true", "on", "open", "opened", "yes", "online", "connected", "running", "locked", *truthy_extra)
     return bool(raw)
 
 
@@ -81,13 +81,7 @@ def _door(flat: Mapping[str, Any]) -> bool | None:
 
 
 def _problem(flat: Mapping[str, Any]) -> bool:
-    """Return true only when Whirlpool reports an actual problem/fault.
-
-    Home Assistant's ``problem`` binary sensor device class displays
-    ``off`` as Clear and ``on`` as Problem. Missing/empty/no-fault values should
-    therefore be False instead of None, otherwise the entity shows Unknown even
-    when there is no issue.
-    """
+    """Return true only when Whirlpool reports an actual problem/fault."""
     raw = find_key(
         flat,
         (
@@ -95,6 +89,8 @@ def _problem(flat: Mapping[str, Any]) -> bool:
             "faultCode",
             "errorCode",
             "alarmCode",
+            "Sys_AlertStatusCustomerFaultCode",
+            "Sys_AlertStatusCustomerFaultCodeNotification",
             "error",
             "fault",
             "alarm",
@@ -222,13 +218,12 @@ BINARY_DESCRIPTIONS: tuple[WhirlpoolApkBinarySensorDescription, ...] = (
     WhirlpoolApkBinarySensorDescription(key="ac_filter_problem", translation_key="ac_filter_problem", icon="mdi:air-filter", device_class=BinarySensorDeviceClass.PROBLEM, value_fn=_filter_problem, aircon_only=True),
     WhirlpoolApkBinarySensorDescription(key="upper_door", translation_key="upper_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("OvenUpperCavity_OpStatusDoorOpen"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(key="lower_door", translation_key="lower_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("OvenLowerCavity_OpStatusDoorOpen"), cooking_only=True),
+    WhirlpoolApkBinarySensorDescription(key="upper_door_locked", translation_key="upper_door_locked", icon="mdi:lock", device_class=BinarySensorDeviceClass.LOCK, value_fn=_bool_attr("OvenUpperCavity_OpStatusDoorLocked"), cooking_only=True),
+    WhirlpoolApkBinarySensorDescription(key="lower_door_locked", translation_key="lower_door_locked", icon="mdi:lock", device_class=BinarySensorDeviceClass.LOCK, value_fn=_bool_attr("OvenLowerCavity_OpStatusDoorLocked"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(
         key="control_lock",
         translation_key="control_lock",
         device_class=BinarySensorDeviceClass.LOCK,
-        # Whirlpool uses 1 = control lock enabled/locked and 0 = unlocked.
-        # Home Assistant binary_sensor lock device_class uses on = unlocked,
-        # off = locked, so invert the appliance attribute for the binary sensor.
         value_fn=_bool_by_keys("Sys_OperationSetControlLock", invert=True),
         cooking_only=True,
     ),
@@ -236,7 +231,7 @@ BINARY_DESCRIPTIONS: tuple[WhirlpoolApkBinarySensorDescription, ...] = (
     WhirlpoolApkBinarySensorDescription(key="upper_meat_probe", translation_key="upper_meat_probe", value_fn=_bool_attr("OvenUpperCavity_AlertStatusMeatProbePluggedIn"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(key="lower_meat_probe", translation_key="lower_meat_probe", value_fn=_bool_attr("OvenLowerCavity_AlertStatusMeatProbePluggedIn"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(key="microwave_door", translation_key="microwave_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("Mwo_OperationStatusDoorOpen"), cooking_only=True, microwave_only=True),
-    WhirlpoolApkBinarySensorDescription(key="microwave_running", translation_key="microwave_running", icon="mdi:power-off", device_class=BinarySensorDeviceClass.RUNNING, value_fn=lambda flat: (None if (s := attr_value(flat, "Mwo_OperationStatusState")) is None else str(s) in {"1", "2", "running", "cooking"}), cooking_only=True, microwave_only=True),
+    WhirlpoolApkBinarySensorDescription(key="microwave_running", translation_key="microwave_running", icon="mdi:power-off", device_class=BinarySensorDeviceClass.RUNNING, value_fn=lambda flat: (None if (s := attr_value(flat, "Mwo_OperationStatusState")) is None else str(s) in {"1", "2", "3", "6", "8", "9", "10", "running", "cooking"}), cooking_only=True, microwave_only=True),
     WhirlpoolApkBinarySensorDescription(key="microwave_light", translation_key="microwave_light", value_fn=_bool_attr("Mwo_DisplaySetLightOn"), cooking_only=True, microwave_only=True, entity_registry_enabled_default=False),
     WhirlpoolApkBinarySensorDescription(key="microwave_turntable", translation_key="microwave_turntable", value_fn=_bool_attr("Mwo_CycleSetTurntable"), cooking_only=True, microwave_only=True),
 )
@@ -274,10 +269,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
                 "microwave_light",
                 "microwave_turntable",
             }:
-                # These duplicate more useful entities on combo cooking models:
-                # oven/microwave door sensors, oven/microwave state sensors,
-                # the control-lock switch, the Sabbath switch, the microwave
-                # light entity, and the microwave turntable switch.
                 continue
             if desc.microwave_only and not has_mwo:
                 continue
@@ -309,7 +300,6 @@ class WhirlpoolApkBinarySensor(WhirlpoolApkEntity, BinarySensorEntity):
     def icon(self) -> str | None:
         if self.entity_description.key == "microwave_running":
             return "mdi:power-on" if self.is_on else "mdi:power-off"
+        if self.entity_description.key.endswith("_door_locked"):
+            return "mdi:lock" if self.is_on else "mdi:lock-open-variant"
         return self.entity_description.icon
-
-
-
