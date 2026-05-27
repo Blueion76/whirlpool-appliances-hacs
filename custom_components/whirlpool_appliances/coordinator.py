@@ -250,22 +250,22 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self._legacy_push_started:
                 await self.legacy_push_manager.ensure_connected()
 
-            for said, push_state in self.legacy_push_manager.states.items():
-                if self.legacy_push_manager.connected and _has_substantive_state(push_state):
-                    statuses[said] = push_state
-
             for appliance in appliances:
                 said = appliance_said(appliance)
                 if not said:
                     continue
-                if said in statuses:
-                    continue
+
                 source = str(appliance.get("source") or appliance.get("applianceType") or "").upper()
                 if bool(appliance.get("thingShield")) or source == "TS_SAID":
                     state = self.thing_manager.states.get(said)
                     if state:
                         statuses[said] = state
                         continue
+
+                # Legacy SAID appliances must always keep REST status as the full
+                # baseline. STOMP/WebSocket payloads are incremental and must never
+                # replace the full REST snapshot, otherwise entities with missing
+                # fields become unavailable.
                 status = await self.client.get_status(said)
                 statuses[said] = status
 
@@ -368,13 +368,26 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data(data)
 
     def _handle_legacy_push_state(self, said: str, state: dict[str, Any]) -> None:
-        """Handle legacy STOMP state callback."""
-        merged = _merge_status(self._latest_statuses.get(said), state)
-        self._latest_statuses[said] = merged
+        """Handle legacy STOMP state callback.
+
+        Legacy STOMP messages are partial updates. Only merge them into entity
+        status when a full REST baseline already exists.
+        """
         data = dict(self.data or {})
         statuses = dict(data.get("statuses") or {})
-        statuses[said] = _merge_status(statuses.get(said), state)
-        data["statuses"] = statuses
+        baseline = statuses.get(said) or self._latest_statuses.get(said)
+
+        if isinstance(baseline, Mapping):
+            merged = _merge_status(baseline, state)
+            self._latest_statuses[said] = merged
+            statuses[said] = merged
+            data["statuses"] = statuses
+        else:
+            _LOGGER.debug(
+                "Received Whirlpool legacy STOMP state before REST baseline; storing push state only: said=%s",
+                said,
+            )
+
         data["legacy_push_states"] = self.legacy_push_manager.states
         data["legacy_push_connected"] = self.legacy_push_manager.connected
         self.async_set_updated_data(data)
