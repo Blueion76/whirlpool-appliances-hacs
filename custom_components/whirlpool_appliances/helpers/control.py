@@ -144,10 +144,14 @@ def control_lock_on(flat: Mapping[str, Any]) -> bool:
 
 
 def remote_control_off(flat: Mapping[str, Any]) -> bool:
-    raw = attr_value(flat, "XCat_RemoteSetRemoteControlEnable")
-    # Missing values should not block commands on appliance families that do not
-    # expose this flag. An explicit 0/false should block with a useful message.
-    return raw is not None and boolish(raw) is False
+    """Return whether remote control should block commands.
+
+    Some combo ovens report XCat_RemoteSetRemoteControlEnable as false or stale
+    even when the app can still stage/start commands. Do not let this unreliable
+    status bit veto oven or microwave actions. Whirlpool/cloud will still reject
+    the command if remote control is actually disabled.
+    """
+    return False
 
 
 def oven_door_open(flat: Mapping[str, Any], cavity: str | None = None) -> bool:
@@ -166,7 +170,7 @@ def frozen_or_custom_cycle(flat: Mapping[str, Any], cavity: str | None = None) -
 
 
 def raise_if_common_blocked(flat: Mapping[str, Any], *, microwave: bool = False, cavity: str | None = None) -> None:
-    """Raise Home Assistant translated errors for common command-blocking states."""
+    """Raise Home Assistant translated errors for reliable command-blocking states."""
     if control_lock_on(flat):
         raise ServiceValidationError(translation_domain=DOMAIN, translation_key="control_lock_on")
     if microwave and microwave_door_open(flat):
