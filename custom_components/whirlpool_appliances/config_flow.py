@@ -9,7 +9,7 @@ import voluptuous as vol
 from aiohttp import ClientError
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_PASSWORD, CONF_REGION, CONF_USERNAME
+from homeassistant.const import CONF_PASSWORD as CONF_PW, CONF_REGION, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import (
@@ -34,16 +34,11 @@ from .const import (
 async def _validate_login(
     hass, data: dict[str, Any], *, check_appliances_exist: bool
 ) -> str | None:
-    """Validate credentials using the same high-level behavior as official HA Whirlpool.
-
-    The official integration authenticates first, then only treats appliance discovery
-    as a setup failure when no supported appliances are returned.
-    """
     session = async_get_clientsession(hass)
     client = WhirlpoolCloudClient(
         session,
         data[CONF_USERNAME],
-        data[CONF_PASSWORD],
+        data[CONF_PW],
         region=data.get(CONF_REGION, DEFAULT_REGION),
         brand=data.get(CONF_BRAND, DEFAULT_BRAND),
     )
@@ -72,20 +67,18 @@ class WhirlpoolApkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> WhirlpoolApkOptionsFlow:
         """Get options flow."""
-        return WhirlpoolApkOptionsFlow(config_entry)
+        return WhirlpoolApkOptionsFlow()
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]):
-        """Handle re-authentication."""
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None):
-        """Confirm re-authentication with Whirlpool."""
         errors: dict[str, str] = {}
         reauth_entry = self._get_reauth_entry()
         if user_input is not None:
             data = {
                 **reauth_entry.data,
-                CONF_PASSWORD: user_input[CONF_PASSWORD],
+                CONF_PW: user_input[CONF_PW],
                 CONF_BRAND: user_input[CONF_BRAND],
             }
             error = await _validate_login(self.hass, data, check_appliances_exist=False)
@@ -96,7 +89,7 @@ class WhirlpoolApkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="reauth_confirm",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_PASSWORD): str,
+                    vol.Required(CONF_PW): str,
                     vol.Required(
                         CONF_BRAND,
                         default=reauth_entry.data.get(CONF_BRAND, DEFAULT_BRAND),
@@ -126,7 +119,7 @@ class WhirlpoolApkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME): str,
-                vol.Required(CONF_PASSWORD): str,
+                vol.Required(CONF_PW): str,
                 vol.Required(CONF_REGION, default=DEFAULT_REGION): vol.In(
                     SUPPORTED_REGIONS
                 ),
@@ -144,9 +137,6 @@ class WhirlpoolApkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class WhirlpoolApkOptionsFlow(config_entries.OptionsFlow):
     """Handle Whirlpool Appliances options."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
