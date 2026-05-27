@@ -152,7 +152,6 @@ oven_control:
           - stay_on
 appliance_option:
   name: Appliance option
-  target: {}
   description: Grouped appliance option service for lights, quiet/remote, timers,
     time, firmware check, and AC filter actions.
   fields:
