@@ -1,545 +1,4 @@
 {
-  "config": {
-    "step": {
-      "user": {
-        "title": "Whirlpool Appliances",
-        "description": "Enter your Whirlpool account details.",
-        "data": {
-          "username": "Email address",
-          "password": "Password",
-          "region": "Region",
-          "brand": "Brand",
-          "scan_interval": "Scan interval",
-          "expose_raw_sensors": "Expose raw status sensors"
-        },
-        "data_description": {
-          "scan_interval": "Polling interval in seconds. Use a higher value to reduce cloud requests.",
-          "expose_raw_sensors": "Create diagnostic raw-status sensors for troubleshooting."
-        }
-      },
-      "reauth_confirm": {
-        "title": "Reauthenticate Whirlpool Appliances",
-        "description": "Update your Whirlpool cloud credentials.",
-        "data": {
-          "password": "Password",
-          "brand": "Brand"
-        }
-      }
-    },
-    "error": {
-      "account_locked": "The Whirlpool account is locked. Check the Whirlpool app or website.",
-      "cannot_connect": "Failed to connect to Whirlpool.",
-      "invalid_auth": "Invalid Whirlpool credentials.",
-      "no_appliances": "No Whirlpool appliances were found on this account.",
-      "unknown": "Unexpected error."
-    },
-    "abort": {
-      "already_configured": "This Whirlpool account is already configured.",
-      "reauth_successful": "Reauthentication was successful."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Whirlpool Appliances options",
-        "data": {
-          "scan_interval": "Scan interval",
-          "expose_raw_sensors": "Expose raw status sensors"
-        },
-        "data_description": {
-          "scan_interval": "Polling interval in seconds.",
-          "expose_raw_sensors": "Create diagnostic raw-status sensors for troubleshooting."
-        }
-      }
-    }
-  },
-  "entity": {
-    "binary_sensor": {
-      "control_lock": {
-        "name": "Control lock"
-      },
-      "door": {
-        "name": "Door"
-      },
-      "error": {
-        "name": "Error"
-      },
-      "lower_door": {
-        "name": "Lower Oven door"
-      },
-      "lower_door_locked": {
-        "name": "Lower Oven door lock"
-      },
-      "lower_meat_probe": {
-        "name": "Lower Oven meat probe"
-      },
-      "online": {
-        "name": "Online"
-      },
-      "remote_control": {
-        "name": "Remote control"
-      },
-      "running": {
-        "name": "Running"
-      },
-      "sabbath_mode": {
-        "name": "Sabbath mode"
-      },
-      "upper_door": {
-        "name": "Oven door"
-      },
-      "upper_door_locked": {
-        "name": "Oven door lock"
-      },
-      "upper_meat_probe": {
-        "name": "Oven meat probe"
-      },
-      "firmware_update_available": {
-        "name": "Firmware update available"
-      },
-      "laundry_door_locked": {
-        "name": "Door locked"
-      },
-      "laundry_remote_start": {
-        "name": "Remote start"
-      },
-      "laundry_clean_washer": {
-        "name": "Clean washer reminder"
-      },
-      "laundry_control_lock": {
-        "name": "Control lock"
-      },
-      "dishwasher_door": {
-        "name": "Dishwasher door"
-      },
-      "refrigerator_door": {
-        "name": "Refrigerator door"
-      },
-      "refrigerator_filter_problem": {
-        "name": "Filter problem"
-      },
-      "refrigerator_vacation_mode": {
-        "name": "Vacation mode"
-      },
-      "ice_maker": {
-        "name": "Ice maker"
-      },
-      "ac_filter_problem": {
-        "name": "AC filter problem"
-      },
-      "microwave_door": {
-        "name": "Microwave door"
-      },
-      "microwave_running": {
-        "name": "Microwave running"
-      },
-      "microwave_light": {
-        "name": "Microwave light"
-      },
-      "microwave_turntable": {
-        "name": "Microwave turntable"
-      }
-    },
-    "button": {
-      "refresh_status": {
-        "name": "Refresh status"
-      },
-      "request_thing_state": {
-        "name": "Request ThingShield state"
-      },
-      "sync": {
-        "name": "Sync"
-      },
-      "sync_time": {
-        "name": "Sync time"
-      },
-      "stop_kitchen_timer_1": {
-        "name": "Stop kitchen timer 1"
-      },
-      "check_firmware_update": {
-        "name": "Check firmware update"
-      },
-      "start_upper_oven": {
-        "name": "Start Oven"
-      },
-      "start_lower_oven": {
-        "name": "Start Lower Oven"
-      },
-      "stop_upper_oven": {
-        "name": "Stop Oven"
-      },
-      "stop_lower_oven": {
-        "name": "Stop Lower Oven"
-      },
-      "start_microwave": {
-        "name": "Start microwave"
-      },
-      "stop_microwave": {
-        "name": "Stop microwave"
-      }
-    },
-    "climate": {
-      "climate": {
-        "name": "Climate"
-      },
-      "upper_climate": {
-        "name": "Upper oven"
-      },
-      "lower_climate": {
-        "name": "Lower oven"
-      },
-      "oven_climate": {
-        "name": "Oven"
-      },
-      "aircon_climate": {
-        "name": "Air conditioner"
-      }
-    },
-    "light": {
-      "cavity_light": {
-        "name": "Cavity light"
-      },
-      "lower_cavity_light": {
-        "name": "Lower Oven light"
-      },
-      "upper_cavity_light": {
-        "name": "Oven light"
-      },
-      "microwave_light": {
-        "name": "Microwave light"
-      }
-    },
-    "number": {
-      "lower_target_temperature_setpoint": {
-        "name": "Lower Oven target temperature setpoint"
-      },
-      "target_temperature_setpoint": {
-        "name": "Target temperature setpoint"
-      },
-      "upper_target_temperature_setpoint": {
-        "name": "Oven target temperature setpoint"
-      },
-      "kitchen_timer_1_set": {
-        "name": "Kitchen timer 1 set"
-      },
-      "upper_oven_cook_time": {
-        "name": "Oven cook time"
-      },
-      "upper_oven_delay_time": {
-        "name": "Oven delay time"
-      },
-      "lower_oven_cook_time": {
-        "name": "Lower oven cook time"
-      },
-      "lower_oven_delay_time": {
-        "name": "Lower oven delay time"
-      },
-      "display_brightness_percent": {
-        "name": "Display brightness"
-      },
-      "microwave_cook_time": {
-        "name": "Microwave cook time"
-      },
-      "microwave_cook_power": {
-        "name": "Microwave cook power"
-      },
-      "microwave_amount": {
-        "name": "Microwave amount"
-      },
-      "microwave_target_temperature": {
-        "name": "Microwave target temperature"
-      }
-    },
-    "select": {
-      "cycle_select": {
-        "name": "Cycle"
-      },
-      "refrigerator_temperature_level": {
-        "name": "Temperature level"
-      },
-      "oven_cook_mode": {
-        "name": "Oven cook mode"
-      },
-      "cook_mode_select": {
-        "name": "Oven cook mode"
-      },
-      "upper_cook_mode_select": {
-        "name": "Oven cook mode"
-      },
-      "lower_cook_mode_select": {
-        "name": "Lower oven cook mode"
-      },
-      "oven_complete_action": {
-        "name": "Oven complete action"
-      },
-      "upper_oven_complete_action": {
-        "name": "Oven complete action"
-      },
-      "lower_oven_complete_action": {
-        "name": "Lower oven complete action"
-      },
-      "frozen_bake_preset": {
-        "name": "Frozen Bake preset"
-      },
-      "upper_frozen_bake_preset": {
-        "name": "Frozen Bake preset"
-      },
-      "lower_frozen_bake_preset": {
-        "name": "Lower Frozen Bake preset"
-      },
-      "oven_clean_mode": {
-        "name": "Oven clean mode"
-      },
-      "upper_oven_clean_mode": {
-        "name": "Oven clean mode"
-      },
-      "lower_oven_clean_mode": {
-        "name": "Lower oven clean mode"
-      },
-      "display_language": {
-        "name": "Display language"
-      },
-      "temperature_units": {
-        "name": "Temperature units"
-      },
-      "keypress_tone_volume": {
-        "name": "Keypress tone volume"
-      },
-      "alert_tone_volume": {
-        "name": "Alert tone volume"
-      },
-      "microwave_mode": {
-        "name": "Microwave mode"
-      },
-      "microwave_preset": {
-        "name": "Microwave preset"
-      },
-      "microwave_doneness": {
-        "name": "Microwave doneness"
-      }
-    },
-    "sensor": {
-      "cook_mode": {
-        "name": "Cook mode"
-      },
-      "current_temperature": {
-        "name": "Current temperature"
-      },
-      "cycle": {
-        "name": "Cycle"
-      },
-      "fault_code": {
-        "name": "Fault code"
-      },
-      "filter_status": {
-        "name": "Filter status"
-      },
-      "humidity": {
-        "name": "Humidity"
-      },
-      "kitchen_timer_1_remaining": {
-        "name": "Kitchen timer 1 remaining"
-      },
-      "kitchen_timer_1_state": {
-        "name": "Kitchen timer 1 state"
-      },
-      "lower_cavity_state": {
-        "name": "Lower Oven state"
-      },
-      "lower_cook_mode": {
-        "name": "Lower Oven cook mode"
-      },
-      "lower_cook_time_elapsed": {
-        "name": "Lower Oven cook time elapsed"
-      },
-      "lower_cook_time_remaining": {
-        "name": "Lower Oven cook time remaining"
-      },
-      "lower_delay_time_remaining": {
-        "name": "Lower Oven delay time remaining"
-      },
-      "lower_cook_time_state": {
-        "name": "Lower Oven cook time state"
-      },
-      "lower_current_temperature": {
-        "name": "Lower Oven current temperature"
-      },
-      "lower_target_temperature": {
-        "name": "Lower Oven target temperature"
-      },
-      "phase": {
-        "name": "Phase"
-      },
-      "raw_status": {
-        "name": "Raw status"
-      },
-      "state": {
-        "name": "State"
-      },
-      "target_temperature": {
-        "name": "Target temperature"
-      },
-      "time_remaining": {
-        "name": "Time remaining"
-      },
-      "upper_cavity_state": {
-        "name": "Oven state"
-      },
-      "upper_cook_mode": {
-        "name": "Oven cook mode"
-      },
-      "upper_cook_time_elapsed": {
-        "name": "Oven cook time elapsed"
-      },
-      "upper_cook_time_remaining": {
-        "name": "Oven cook time remaining"
-      },
-      "upper_delay_time_remaining": {
-        "name": "Oven delay time remaining"
-      },
-      "upper_cook_time_state": {
-        "name": "Oven cook time state"
-      },
-      "upper_current_temperature": {
-        "name": "Oven current temperature"
-      },
-      "upper_target_temperature": {
-        "name": "Oven target temperature"
-      },
-      "end_time": {
-        "name": "End time"
-      },
-      "microwave_state": {
-        "name": "Microwave state"
-      },
-      "microwave_cook_time_state": {
-        "name": "Microwave cook time state"
-      },
-      "microwave_cook_time_elapsed": {
-        "name": "Microwave cook time elapsed"
-      },
-      "microwave_cook_power": {
-        "name": "Microwave cook power"
-      },
-      "microwave_cook_time_remaining": {
-        "name": "Microwave cook time remaining"
-      },
-      "microwave_cook_time_set": {
-        "name": "Microwave cook time set"
-      },
-      "microwave_current_temperature": {
-        "name": "Microwave current temperature"
-      },
-      "microwave_target_temperature": {
-        "name": "Microwave target temperature"
-      },
-      "laundry_state": {
-        "name": "Laundry state"
-      },
-      "laundry_cycle": {
-        "name": "Laundry cycle"
-      },
-      "laundry_phase": {
-        "name": "Laundry phase"
-      },
-      "laundry_time_remaining": {
-        "name": "Laundry time remaining"
-      },
-      "laundry_end_time": {
-        "name": "Laundry end time"
-      },
-      "system_version": {
-        "name": "System version"
-      },
-      "dishwasher_state": {
-        "name": "Dishwasher state"
-      },
-      "dishwasher_cycle": {
-        "name": "Dishwasher cycle"
-      },
-      "dishwasher_phase": {
-        "name": "Dishwasher phase"
-      },
-      "dishwasher_time_remaining": {
-        "name": "Dishwasher time remaining"
-      },
-      "refrigerator_temperature": {
-        "name": "Refrigerator temperature"
-      },
-      "freezer_temperature": {
-        "name": "Freezer temperature"
-      },
-      "refrigerator_target_temperature": {
-        "name": "Refrigerator target temperature"
-      },
-      "freezer_target_temperature": {
-        "name": "Freezer target temperature"
-      },
-      "refrigerator_filter_status": {
-        "name": "Filter status"
-      },
-      "ac_mode": {
-        "name": "AC mode"
-      },
-      "ac_fan_speed": {
-        "name": "AC fan speed"
-      },
-      "cooktop_state": {
-        "name": "Cooktop state"
-      }
-    },
-    "switch": {
-      "control_lock": {
-        "name": "Control lock"
-      },
-      "power": {
-        "name": "Power"
-      },
-      "sabbath_mode": {
-        "name": "Sabbath mode"
-      },
-      "time_auto_update": {
-        "name": "Time auto update"
-      },
-      "enable_24_hour_time": {
-        "name": "24-hour time"
-      },
-      "quiet_mode": {
-        "name": "Quiet mode"
-      },
-      "remote_enable": {
-        "name": "Remote enable"
-      },
-      "microwave_turntable": {
-        "name": "Microwave turntable"
-      },
-      "ac_quiet_mode": {
-        "name": "AC quiet mode"
-      },
-      "ac_turbo_mode": {
-        "name": "AC turbo mode"
-      },
-      "ac_eco_mode": {
-        "name": "AC eco mode"
-      },
-      "ac_display": {
-        "name": "AC display"
-      },
-      "ac_horizontal_louver_swing": {
-        "name": "AC horizontal louver swing"
-      }
-    },
-    "lock": {
-      "control_lock": {
-        "name": "Control lock"
-      }
-    },
-    "update": {
-      "firmware_update": {
-        "name": "Firmware"
-      }
-    }
-  },
   "services": {
     "call_api": {
       "name": "Call Whirlpool API",
@@ -547,29 +6,29 @@
       "fields": {
         "method": {
           "name": "Method",
-          "description": "HTTP method to use."
+          "description": "HTTP method."
         },
         "path": {
           "name": "Path",
-          "description": "Whirlpool API path or full URL to call."
+          "description": "Whirlpool API path or URL."
         },
         "body": {
           "name": "Body",
-          "description": "Optional JSON request body."
+          "description": "Optional request body."
         },
         "params": {
           "name": "Query parameters",
           "description": "Optional query parameters."
         },
         "auth": {
-          "name": "Send Authorization header",
-          "description": "Send the normal OAuth Authorization header."
+          "name": "Authorization header",
+          "description": "Send authorization header."
         }
       }
     },
     "send_appliance_command": {
-      "name": "Send appliance command",
-      "description": "Send a command through /api/v1/appliance/command.",
+      "name": "Send appliance request",
+      "description": "Send an appliance request.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -580,22 +39,22 @@
           "description": "Manual SAID override."
         },
         "command": {
-          "name": "Command",
-          "description": "Command name to send."
+          "name": "Request",
+          "description": "Request name."
         },
         "attributes": {
           "name": "Attributes",
-          "description": "Legacy Whirlpool attributes to send."
+          "description": "Attributes to send."
         },
         "raw": {
           "name": "Raw payload",
-          "description": "Optional raw command payload."
+          "description": "Optional raw payload."
         }
       }
     },
     "set_cavity_light": {
       "name": "Set cavity light",
-      "description": "Turn an oven or microwave cavity light on or off.",
+      "description": "Turn a cavity light on or off.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -607,7 +66,7 @@
         },
         "enabled": {
           "name": "Enabled",
-          "description": "Turn this feature on or off."
+          "description": "Turn on or off."
         },
         "cavity": {
           "name": "Cavity",
@@ -629,7 +88,7 @@
         },
         "function": {
           "name": "Function",
-          "description": "Named appliance API function to call."
+          "description": "Function to call."
         },
         "body": {
           "name": "Body",
@@ -637,21 +96,41 @@
         },
         "path_values": {
           "name": "Path values",
-          "description": "Optional path template values."
+          "description": "Optional path values."
         }
       }
     },
     "refresh": {
       "name": "Refresh Whirlpool data",
-      "description": "Refresh appliance list and status data now."
+      "description": "Refresh appliance data now."
     },
     "refresh_ddm_capabilities": {
       "name": "Refresh DDM capabilities",
-      "description": "Refresh Whirlpool Device Data Model capabilities and diagnostic errors."
+      "description": "Refresh Device Data Model capabilities."
+    },
+    "update_appliances": {
+      "name": "Update appliances",
+      "description": "Call Whirlpool appliance update endpoint.",
+      "fields": {
+        "body": {
+          "name": "Body",
+          "description": "Optional request body."
+        }
+      }
+    },
+    "get_ddm_content": {
+      "name": "Get DDM content",
+      "description": "Fetch content metadata for a Device Data Model key.",
+      "fields": {
+        "ddm_key": {
+          "name": "DDM key",
+          "description": "Device Data Model key."
+        }
+      }
     },
     "publish_thing_command": {
-      "name": "Publish ThingShield MQTT command",
-      "description": "Publish a command to a ThingShield appliance over AWS IoT MQTT.",
+      "name": "Publish ThingShield request",
+      "description": "Publish a ThingShield MQTT request.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -662,18 +141,18 @@
           "description": "Manual SAID override."
         },
         "command": {
-          "name": "Command",
-          "description": "ThingShield command name."
+          "name": "Request",
+          "description": "ThingShield request name."
         },
         "payload": {
           "name": "Payload",
-          "description": "Optional command payload."
+          "description": "Optional payload."
         }
       }
     },
     "set_attributes": {
-      "name": "Set legacy appliance attributes",
-      "description": "Set raw legacy SAID attributes through /api/v1/appliance/command.",
+      "name": "Set appliance attributes",
+      "description": "Set appliance attributes.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -685,13 +164,13 @@
         },
         "attributes": {
           "name": "Attributes",
-          "description": "Legacy Whirlpool attributes to send."
+          "description": "Attributes to send."
         }
       }
     },
     "set_oven_cook": {
-      "name": "Start oven cook cycle",
-      "description": "Start or modify a Whirlpool legacy oven cavity cook cycle.",
+      "name": "Set oven cook cycle",
+      "description": "Set an oven cook cycle.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -707,29 +186,29 @@
         },
         "mode": {
           "name": "Mode",
-          "description": "Oven cooking mode."
+          "description": "Oven mode."
         },
         "cook_time_minutes": {
           "name": "Cook time",
-          "description": "Optional cook time in minutes."
+          "description": "Cook time in minutes."
         },
         "delay_time_minutes": {
           "name": "Delay time",
-          "description": "Optional delay time in minutes."
+          "description": "Delay time in minutes."
         },
         "complete_action": {
           "name": "Complete action",
-          "description": "What the oven should do when cook time completes."
+          "description": "Action when cook time completes."
         },
         "cavity": {
           "name": "Cavity",
-          "description": "Oven cavity to control."
+          "description": "Oven cavity."
         }
       }
     },
     "set_oven_frozen_bake": {
-      "name": "Start Frozen Bake",
-      "description": "Start a Whirlpool Frozen Bake automatic oven cycle.",
+      "name": "Set Frozen Bake",
+      "description": "Set a Frozen Bake cycle.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -753,17 +232,17 @@
         },
         "complete_action": {
           "name": "Complete action",
-          "description": "What the oven should do when cook time completes."
+          "description": "Action when cook time completes."
         },
         "cavity": {
           "name": "Cavity",
-          "description": "Oven cavity to control."
+          "description": "Oven cavity."
         }
       }
     },
     "stop_oven_cavity": {
       "name": "Stop oven cavity",
-      "description": "Cancel a Whirlpool legacy oven cavity cook cycle.",
+      "description": "Stop an oven cavity.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -775,13 +254,13 @@
         },
         "cavity": {
           "name": "Cavity",
-          "description": "Oven cavity to stop."
+          "description": "Oven cavity."
         }
       }
     },
     "stop_microwave": {
       "name": "Stop microwave",
-      "description": "Cancel a Whirlpool legacy microwave operation.",
+      "description": "Stop microwave operation.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -795,7 +274,7 @@
     },
     "sync_time": {
       "name": "Sync appliance time",
-      "description": "Sync appliance time with the Whirlpool cloud time endpoint.",
+      "description": "Sync appliance time.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -813,7 +292,7 @@
     },
     "set_timezone": {
       "name": "Set appliance time zone",
-      "description": "Write the appliance time zone attributes.",
+      "description": "Set appliance time zone attributes.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -831,7 +310,7 @@
     },
     "set_time_auto_update": {
       "name": "Set time auto update",
-      "description": "Turn Whirlpool automatic time update on or off.",
+      "description": "Turn automatic time update on or off.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -843,7 +322,7 @@
         },
         "enabled": {
           "name": "Enabled",
-          "description": "Turn automatic time update on or off."
+          "description": "Turn on or off."
         },
         "timezone": {
           "name": "Time zone",
@@ -853,7 +332,7 @@
     },
     "set_kitchen_timer": {
       "name": "Set kitchen timer",
-      "description": "Set and start the appliance on-screen kitchen timer.",
+      "description": "Set the appliance kitchen timer.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -875,7 +354,7 @@
     },
     "stop_kitchen_timer": {
       "name": "Stop kitchen timer",
-      "description": "Stop or cancel the appliance on-screen kitchen timer.",
+      "description": "Stop the appliance kitchen timer.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -893,7 +372,7 @@
     },
     "check_firmware_update": {
       "name": "Check firmware update",
-      "description": "Check Whirlpool cloud for firmware update availability.",
+      "description": "Check for firmware update availability.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -907,7 +386,7 @@
     },
     "set_quiet_mode": {
       "name": "Set quiet mode",
-      "description": "Turn Whirlpool quiet mode on or off.",
+      "description": "Turn quiet mode on or off.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -919,13 +398,13 @@
         },
         "enabled": {
           "name": "Enabled",
-          "description": "Turn quiet mode on or off."
+          "description": "Turn on or off."
         }
       }
     },
     "set_remote_enable": {
       "name": "Set remote enable",
-      "description": "Attempt to turn Whirlpool remote enable on or off.",
+      "description": "Turn remote enable on or off.",
       "fields": {
         "appliance_device": {
           "name": "Appliance device",
@@ -937,47 +416,197 @@
         },
         "enabled": {
           "name": "Enabled",
-          "description": "Turn remote enable on or off."
+          "description": "Turn on or off."
+        }
+      }
+    },
+    "get_cycle_history": {
+      "name": "Get cycle history",
+      "description": "Fetch cycle history.",
+      "fields": {
+        "appliance_device": {
+          "name": "Appliance device",
+          "description": "Whirlpool appliance device."
+        },
+        "said": {
+          "name": "SAID",
+          "description": "Manual SAID override."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "Maximum records to return."
+        },
+        "params": {
+          "name": "Query parameters",
+          "description": "Optional query parameters."
+        }
+      }
+    },
+    "get_fault_history": {
+      "name": "Get fault history",
+      "description": "Fetch fault-code history.",
+      "fields": {
+        "appliance_device": {
+          "name": "Appliance device",
+          "description": "Whirlpool appliance device."
+        },
+        "said": {
+          "name": "SAID",
+          "description": "Manual SAID override."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "Maximum records to return."
+        },
+        "params": {
+          "name": "Query parameters",
+          "description": "Optional query parameters."
+        }
+      }
+    },
+    "get_favorites": {
+      "name": "Get favorites",
+      "description": "Fetch saved/favorite cycles.",
+      "fields": {
+        "appliance_device": {
+          "name": "Appliance device",
+          "description": "Whirlpool appliance device."
+        },
+        "said": {
+          "name": "SAID",
+          "description": "Manual SAID override."
+        }
+      }
+    },
+    "delete_favorite": {
+      "name": "Delete favorite",
+      "description": "Delete a saved/favorite cycle.",
+      "fields": {
+        "appliance_device": {
+          "name": "Appliance device",
+          "description": "Whirlpool appliance device."
+        },
+        "said": {
+          "name": "SAID",
+          "description": "Manual SAID override."
+        },
+        "favorite_id": {
+          "name": "Favorite ID",
+          "description": "Favorite identifier."
+        }
+      }
+    },
+    "get_messages": {
+      "name": "Get messages",
+      "description": "Fetch account message-center messages."
+    },
+    "get_message": {
+      "name": "Get message",
+      "description": "Fetch one message-center item.",
+      "fields": {
+        "message_id": {
+          "name": "Message ID",
+          "description": "Message identifier."
+        }
+      }
+    },
+    "dismiss_message": {
+      "name": "Dismiss message",
+      "description": "Dismiss one message-center item.",
+      "fields": {
+        "message_id": {
+          "name": "Message ID",
+          "description": "Message identifier."
+        }
+      }
+    },
+    "get_accessories": {
+      "name": "Get accessories",
+      "description": "Fetch account accessories."
+    },
+    "get_accessory_status": {
+      "name": "Get accessory status",
+      "description": "Fetch accessory status by serial number.",
+      "fields": {
+        "serial_number": {
+          "name": "Serial number",
+          "description": "Accessory serial number."
+        }
+      }
+    },
+    "get_accessory_cycle_history": {
+      "name": "Get accessory cycle history",
+      "description": "Fetch accessory cycle history.",
+      "fields": {
+        "params": {
+          "name": "Query parameters",
+          "description": "Optional query parameters."
+        }
+      }
+    },
+    "get_accessory_ota_status": {
+      "name": "Get accessory OTA status",
+      "description": "Fetch accessory OTA status."
+    },
+    "live_collect": {
+      "name": "Live collect",
+      "description": "Fetch live diagnostic data for an appliance.",
+      "fields": {
+        "appliance_device": {
+          "name": "Appliance device",
+          "description": "Whirlpool appliance device."
+        },
+        "said": {
+          "name": "SAID",
+          "description": "Manual SAID override."
+        }
+      }
+    },
+    "get_ac_filter_status": {
+      "name": "Get AC filter status",
+      "description": "Fetch AC filter status.",
+      "fields": {
+        "appliance_device": {
+          "name": "Appliance device",
+          "description": "Whirlpool appliance device."
+        },
+        "said": {
+          "name": "SAID",
+          "description": "Manual SAID override."
+        }
+      }
+    },
+    "reset_ac_filter": {
+      "name": "Reset AC filter",
+      "description": "Reset AC filter status.",
+      "fields": {
+        "appliance_device": {
+          "name": "Appliance device",
+          "description": "Whirlpool appliance device."
+        },
+        "said": {
+          "name": "SAID",
+          "description": "Manual SAID override."
+        },
+        "body": {
+          "name": "Body",
+          "description": "Optional request body override."
         }
       }
     }
   },
   "exceptions": {
-    "account_locked": {
-      "message": "The Whirlpool account is locked. Check the Whirlpool app or website."
-    },
-    "appliances_fetch_failed": {
-      "message": "Whirlpool setup did not find any appliances."
-    },
-    "cannot_connect": {
-      "message": "Failed to connect to Whirlpool."
-    },
-    "invalid_auth": {
-      "message": "Invalid Whirlpool credentials."
-    },
-    "invalid_value_set": {
-      "message": "The selected value is not valid for this appliance."
-    },
-    "remote_control_off": {
-      "message": "Remote control is off on the appliance."
-    },
-    "control_lock_on": {
-      "message": "Control lock is on. Turn control lock off before sending this command."
-    },
-    "door_open": {
-      "message": "The appliance door is open. Close the door before sending this command."
-    },
-    "modify_not_allowed": {
-      "message": "This cycle cannot be modified while it is running."
-    },
-    "delay_change_not_allowed": {
-      "message": "Delay time cannot be changed while the oven is running."
-    },
-    "oven_active": {
-      "message": "The oven is active. Stop the current cycle before changing this setting."
-    },
-    "request_failed": {
-      "message": "Whirlpool rejected the command."
-    }
+    "account_locked": {"message": "The Whirlpool account is locked."},
+    "appliances_fetch_failed": {"message": "Whirlpool setup did not find any appliances."},
+    "cannot_connect": {"message": "Failed to connect to Whirlpool."},
+    "invalid_auth": {"message": "Invalid Whirlpool credentials."},
+    "invalid_value_set": {"message": "The selected value is not valid for this appliance."},
+    "remote_control_off": {"message": "Remote control is off on the appliance."},
+    "control_lock_on": {"message": "Control lock is on. Turn control lock off before sending this request."},
+    "door_open": {"message": "The appliance door is open. Close the door before sending this request."},
+    "modify_not_allowed": {"message": "This cycle cannot be modified while it is running."},
+    "delay_change_not_allowed": {"message": "Delay time cannot be changed while the oven is running."},
+    "oven_active": {"message": "The oven is active. Stop the current cycle before changing this setting."},
+    "request_failed": {"message": "Whirlpool rejected the request."}
   }
 }
