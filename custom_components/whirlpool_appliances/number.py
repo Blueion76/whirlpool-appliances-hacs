@@ -50,16 +50,16 @@ def _temp_from_tenths(value: Any) -> float | None:
 
 
 def _fahrenheit_to_celsius(value: float) -> float:
+    """Convert a known Whirlpool-supported Fahrenheit setpoint to Celsius.
+
+    This is not a frontend display conversion. Whirlpool ovens use the familiar
+    175–550 °F setpoint grid, but the command payload is Celsius/tenths °C.
+    """
     return (float(value) - 32) * 5 / 9
 
 
 def _allowed_oven_temperatures() -> tuple[float, ...]:
-    """Return Whirlpool oven setpoints in native Celsius units.
-
-    Whirlpool exposes oven temperatures as Celsius/tenths of Celsius, while
-    common oven setpoints are 5 °F increments. Keep the native values in
-    Celsius so Home Assistant can convert them for display.
-    """
+    """Return supported oven setpoints in native Celsius units."""
     return tuple(round(_fahrenheit_to_celsius(v), 1) for v in range(175, 551, 5))
 
 

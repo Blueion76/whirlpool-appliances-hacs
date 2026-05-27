@@ -12,7 +12,7 @@ from homeassistant.components.climate import (
     HVACAction,
     HVACMode,
 )
-from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.const import ATTR_TEMPERATURE, PRECISION_WHOLE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -24,13 +24,11 @@ from .const import DOMAIN
 from .entity import (
     WhirlpoolApkEntity,
     attr_value,
-    celsius_to_unit,
     entity_name_from_key,
     find_key,
     is_aircon_appliance,
     is_cooking_appliance,
     oven_cavity_exists,
-    unit_to_celsius,
 )
 
 
@@ -150,16 +148,12 @@ def _snap_temperature(value: float, unit: UnitOfTemperature) -> float:
 
 
 def _command_celsius(value: float, unit: UnitOfTemperature) -> float:
-    """Convert HA display temperature to Whirlpool Celsius command units.
+    """Return Whirlpool Celsius command units from the native HA value.
 
-    DDM TempRange values are tenths of °C. Return one decimal place so commands
-    can preserve captured defaults like 176.6 °C bake and 287.7 °C broil.
+    Temperature controls expose native Celsius. Home Assistant may display them
+    differently in the frontend, but async_set_temperature receives native °C.
     """
-    snapped = _snap_temperature(value, unit)
-    celsius = unit_to_celsius(snapped, unit)
-    if celsius is None:
-        celsius = 176.6
-    return round(float(celsius), 1)
+    return round(float(_snap_temperature(value, unit)), 1)
 
 
 async def async_setup_entry(
@@ -270,6 +264,10 @@ class WhirlpoolAirConditionerClimate(WhirlpoolApkEntity, ClimateEntity):
         return super().temperature_unit
 
     @property
+    def precision(self) -> float:
+        return PRECISION_WHOLE
+
+    @property
     def min_temp(self) -> float:
         return 16.0 if self.temperature_unit == UnitOfTemperature.CELSIUS else 61.0
 
@@ -281,14 +279,18 @@ class WhirlpoolAirConditionerClimate(WhirlpoolApkEntity, ClimateEntity):
     def target_temperature_step(self) -> float:
         return 1.0
 
-    def _display_temp(self, celsius: float | None) -> float | None:
-        if celsius is None:
-            return None
-        display = celsius_to_unit(celsius, self.temperature_unit)
-        return round(float(display), 1) if display is not None else None
+    @property
+    def precision(self) -> float:
+        return PRECISION_WHOLE
 
-    def _command_temp_c(self, display_value: float | int | None) -> float | None:
-        return unit_to_celsius(display_value, self.temperature_unit)
+    @staticmethod
+    def _native_temp(celsius: float | None) -> float | None:
+        """Return native Celsius temperature for Home Assistant.
+
+        Home Assistant performs frontend/display conversion from native °C when
+        the entity exposes a temperature device class/unit.
+        """
+        return round(float(celsius), 1) if celsius is not None else None
 
     @property
     def current_temperature(self) -> float | None:
@@ -300,7 +302,7 @@ class WhirlpoolAirConditionerClimate(WhirlpoolApkEntity, ClimateEntity):
             "currentTemperature",
             "temperature",
         )
-        return self._display_temp(_temp_from_whirlpool(raw))
+        return self._native_temp(_temp_from_whirlpool(raw))
 
     @property
     def target_temperature(self) -> float | None:
@@ -311,7 +313,7 @@ class WhirlpoolAirConditionerClimate(WhirlpoolApkEntity, ClimateEntity):
             "targetTemp",
             "setTemperature",
         )
-        return self._display_temp(_temp_from_whirlpool(raw))
+        return self._native_temp(_temp_from_whirlpool(raw))
 
     @property
     def current_humidity(self) -> int | None:
@@ -372,7 +374,7 @@ class WhirlpoolAirConditionerClimate(WhirlpoolApkEntity, ClimateEntity):
     async def async_set_temperature(self, **kwargs: Any) -> None:
         if ATTR_TEMPERATURE not in kwargs:
             return
-        target_c = self._command_temp_c(kwargs[ATTR_TEMPERATURE])
+        target_c = kwargs[ATTR_TEMPERATURE]
         self._check_service_request(await self.client.set_aircon(self.said, target_temperature=target_c))
         await self.coordinator.async_request_refresh()
 
@@ -443,19 +445,16 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
                 ranges.append(mode["target_temperature"])
         return ranges
 
-    def _display_from_celsius(self, value: float | None) -> float | None:
-        if value is None:
-            return None
-        display = celsius_to_unit(value, self.temperature_unit)
-        if display is None:
-            return None
-        return float(round(display)) if self.temperature_unit == UnitOfTemperature.FAHRENHEIT else round(float(display), 1)
+    @staticmethod
+    def _native_from_celsius(value: float | None) -> float | None:
+        """Return native Celsius temperature for Home Assistant."""
+        return round(float(value), 1) if value is not None else None
 
     def _range_display_value(self, rng: Mapping[str, Any], key: str) -> float | None:
         raw = rng.get(key)
         if raw is None:
             return None
-        return self._display_from_celsius(float(raw))
+        return self._native_from_celsius(float(raw))
 
     def _snap_to_capability_temperature(self, value: float, preset: str | None = None) -> float:
         rng = self._temperature_range(preset)
@@ -526,7 +525,7 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
     def current_temperature(self) -> float | None:
         raw = attr_value(self.flat_status, f"{_cavity_prefix(self.cavity)}_DisplStatusDisplayTemp")
         value = _temp_from_tenths(raw)
-        return celsius_to_unit(value, self.temperature_unit) if value is not None else None
+        return self._native_from_celsius(value) if value is not None else None
 
     @property
     def target_temperature(self) -> float | None:
@@ -535,10 +534,7 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
         if value is None:
             return None
 
-        display = celsius_to_unit(value, self.temperature_unit)
-        if display is None:
-            return None
-        return self._snap_to_capability_temperature(display)
+        return self._snap_to_capability_temperature(value)
 
     def _active_preset_fallback(self) -> str | None:
         """Fallback when Minerva reports active state but leaves mode at 0.
@@ -586,7 +582,7 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
             temp_f = 170
         else:
             temp_f = 350
-        return temp_f if self.temperature_unit == UnitOfTemperature.FAHRENHEIT else round((temp_f - 32) * 5 / 9, 1)
+        return round((temp_f - 32) * 5 / 9, 1)
 
     def _default_target_temperature(self) -> float:
         return self._default_target_temperature_for_preset(self.preset_mode)
@@ -610,7 +606,7 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
         self._check_service_request(
             await self.client.set_oven_cook(
                 self.said,
-                unit_to_celsius(self._snap_to_capability_temperature(float(temperature)), self.temperature_unit) or 176.6,
+                self._snap_to_capability_temperature(float(temperature)) or 176.6,
                 self._selected_service_mode(),
                 self.cavity,
             )
@@ -642,7 +638,7 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
         self._check_service_request(
             await self.client.set_oven_cook(
                 self.said,
-                unit_to_celsius(self._snap_to_capability_temperature(float(target), preset_mode), self.temperature_unit) or 176.6,
+                self._snap_to_capability_temperature(float(target), preset_mode) or 176.6,
                 OVEN_PRESET_TO_SERVICE_MODE[preset_mode],
                 self.cavity,
             )
@@ -671,7 +667,7 @@ class WhirlpoolOvenClimate(WhirlpoolApkEntity, ClimateEntity):
         self._check_service_request(
             await self.client.set_oven_cook(
                 self.said,
-                unit_to_celsius(self._snap_to_capability_temperature(float(target), current_preset), self.temperature_unit) or 176.6,
+                self._snap_to_capability_temperature(float(target), current_preset) or 176.6,
                 self._selected_service_mode(),
                 self.cavity,
             )

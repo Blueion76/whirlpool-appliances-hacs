@@ -18,37 +18,6 @@ from .helpers.logging import summarize
 _LOGGER = logging.getLogger(__name__)
 
 
-def temperature_unit_for_region(region: str | None) -> UnitOfTemperature:
-    """Return the HA display temperature unit for a Whirlpool account region.
-
-    Whirlpool legacy cooking attributes report temperatures in tenths of a
-    degree Celsius. Home Assistant entities should still display in the
-    user-selected Whirlpool region's familiar unit: Fahrenheit for US/NAR,
-    Celsius everywhere else.
-    """
-    return UnitOfTemperature.FAHRENHEIT if str(region or "").upper() == "US" else UnitOfTemperature.CELSIUS
-
-
-def celsius_to_unit(value: float | int | None, unit: UnitOfTemperature) -> float | None:
-    """Convert a Celsius value to the requested HA display unit."""
-    if value is None:
-        return None
-    value_f = float(value)
-    if unit == UnitOfTemperature.FAHRENHEIT:
-        return round(value_f * 9 / 5 + 32, 1)
-    return value_f
-
-
-def unit_to_celsius(value: float | int | None, unit: UnitOfTemperature) -> float | None:
-    """Convert a HA display-unit temperature back to Celsius for Whirlpool."""
-    if value is None:
-        return None
-    value_f = float(value)
-    if unit == UnitOfTemperature.FAHRENHEIT:
-        return (value_f - 32) * 5 / 9
-    return value_f
-
-
 def first_value(mapping: Mapping[str, Any], keys: tuple[str, ...]) -> Any | None:
     """Return the first non-empty value from a mapping using case-sensitive keys."""
     for key in keys:
@@ -448,11 +417,12 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
 
     @property
     def temperature_unit(self) -> UnitOfTemperature:
-        """Return the native temperature unit used by Whirlpool payloads.
+        """Return the entity native temperature unit.
 
-        Whirlpool legacy cooking values are normalized to Celsius before being
-        exposed to Home Assistant. Home Assistant/frontend handles user-facing
-        conversion to Fahrenheit or Celsius from the entity's native unit.
+        Whirlpool cooking payloads are normalized to Celsius before being
+        exposed to Home Assistant. Home Assistant handles user-facing display
+        conversion when an entity has a temperature device class and a native
+        °C unit.
         """
         return UnitOfTemperature.CELSIUS
 
