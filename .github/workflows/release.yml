@@ -103,6 +103,7 @@ jobs:
         if: steps.tag_exists.outputs.exists != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ steps.notes.outputs.notes }}
         run: |
           prev="${{ steps.prev_tag.outputs.prev_tag }}"
           if [ -z "$prev" ]; then prev="initial release"; fi
@@ -122,9 +123,3 @@ jobs:
           gh release create "${{ steps.manifest.outputs.tag }}" \
             --title "${{ steps.manifest.outputs.tag }}" \
             --notes-file release_notes.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NOTES: ${{ steps.notes.outputs.notes }}
-
-Changes since ${prev}:
-${{ steps.notes.outputs.notes }}"
