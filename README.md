@@ -28,9 +28,11 @@ The integration aims to support the most common Whirlpool-connected appliance ca
 
 ## Tested appliances
 
-The following appliance types have been reported as working with this integration:
+The following appliances have been confirmed working by the community:
 
-- **Not yet documented**
+| Brand | Model | Region | Cloud type | Notes |
+| --- | --- | --- | --- | --- |
+| Whirlpool | WOC54EC0HS00 | US | SAID | Wall oven / microwave combo (reported working) |
 
 If you have a confirmed working model, please open an issue or PR with:
 
