@@ -15,9 +15,9 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from . import WhirlpoolApkConfigEntry
-from .api import appliance_said
+from .api import appliance_said, appliance_name
 from .const import CONF_EXPOSE_RAW_SENSORS
-from .entity import WhirlpoolApkEntity, attr_value, celsius_to_unit, entity_name_from_key, find_key, is_aircon_appliance, is_cooktop_appliance, is_cooking_appliance, is_dishwasher_appliance, is_laundry_appliance, is_refrigeration_appliance, microwave_exists, oven_cavity_exists
+from .entity import WhirlpoolApkEntity, attr_value, celsius_to_unit, entity_name_from_key, find_key, flatten, is_aircon_appliance, is_cooktop_appliance, is_cooking_appliance, is_dishwasher_appliance, is_laundry_appliance, is_refrigeration_appliance, microwave_exists, oven_cavity_exists
 
 CAVITY_STATE = {"0": "Standby", "1": "Preheating", "2": "Cooking", "4": "Not Present"}
 COOK_MODE = {"0": "Standby", "2": "Bake", "6": "Convection Bake", "8": "Broil", "9": "Convection Broil", "16": "Convection Roast", "24": "Keep Warm", "41": "Air Fry"}
@@ -317,8 +317,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
             if desc.key.startswith("lower_") and not oven_cavity_exists(flat, "lower"):
                 continue
             entities.append(WhirlpoolApkSensor(coordinator, appliance, desc))
+        if bool(appliance.get("thingShield")) or str(appliance.get("source") or "").upper() == "TS_SAID":
+            entities.extend(WhirlpoolThingShieldSensor(coordinator, appliance, key) for key in THINGSHIELD_SENSOR_KEYS)
         if entry.options.get(CONF_EXPOSE_RAW_SENSORS, entry.data.get(CONF_EXPOSE_RAW_SENSORS, True)):
             entities.append(WhirlpoolRawStatusSensor(coordinator, appliance))
+    entities.extend(await _async_accessory_entities(coordinator))
     async_add_entities(entities)
 
 
@@ -372,3 +375,226 @@ class WhirlpoolRawStatusSensor(WhirlpoolApkEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return {"status": self.status, "appliance": self.appliance}
+
+
+THINGSHIELD_SENSOR_KEYS = (
+    "ts_machine_state",
+    "ts_cycle",
+    "ts_phase",
+    "ts_fault_code",
+    "ts_cavity_state",
+    "ts_cooktop_zone_state",
+    "ts_refrigerator_state",
+)
+
+TS_SENSOR_CANDIDATES = {
+    "ts_machine_state": ("machineState", "applianceState", "state", "cavityStatus.machineState"),
+    "ts_cycle": ("cycle", "cycleName", "currentCycle", "cycleLabel"),
+    "ts_phase": ("phase", "currentPhase", "cyclePhase", "cycleStep", "subState"),
+    "ts_fault_code": ("faultCode", "fault", "errorCode", "activeFault", "alarmCode"),
+    "ts_cavity_state": ("cavityState", "cavityStatus.state", "ovenState"),
+    "ts_cooktop_zone_state": ("cooktopZoneState", "zoneState", "cooktop.zoneState"),
+    "ts_refrigerator_state": ("refrigeratorState", "refrigerationState", "fridgeState"),
+}
+
+ACCESSORY_SENSOR_DEFINITIONS = {
+    "probe_current_temperature": {
+        "name": "Probe current temperature",
+        "keys": ("probeCurrentTemp", "currentTemperature", "probe.currentTemperature", "foodTemperature"),
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "unit": UnitOfTemperature.CELSIUS,
+    },
+    "probe_ambient_temperature": {
+        "name": "Probe ambient temperature",
+        "keys": ("probeAmbientTemp", "ambientTemperature", "probe.ambientTemperature"),
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "unit": UnitOfTemperature.CELSIUS,
+    },
+    "probe_middle_temperature": {
+        "name": "Probe middle temperature",
+        "keys": ("probeMiddleTemp", "middleTemperature", "probe.middleTemperature"),
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "unit": UnitOfTemperature.CELSIUS,
+    },
+    "probe_battery": {
+        "name": "Probe battery",
+        "keys": ("probeBattery", "probeBatteryLevel", "probeBatteryPercentage", "battery", "batteryLevel"),
+        "device_class": SensorDeviceClass.BATTERY,
+        "unit": PERCENTAGE,
+    },
+    "probe_signal_strength": {
+        "name": "Probe signal strength",
+        "keys": ("probeSignalStrength", "signalStrength", "rssi"),
+        "unit": PERCENTAGE,
+    },
+    "probe_status": {
+        "name": "Probe status",
+        "keys": ("probeStatus", "status", "probeStatusDetails"),
+    },
+    "probe_firmware_version": {
+        "name": "Probe firmware version",
+        "keys": ("probeFirmwareVersion", "firmwareVersion", "softwareVersion"),
+    },
+    "probe_hardware_version": {
+        "name": "Probe hardware version",
+        "keys": ("probeHardwareVersion", "hardwareVersion"),
+    },
+    "probe_serial_number": {
+        "name": "Probe serial number",
+        "keys": ("probeSerialNumber", "serialNumber", "serial", "id"),
+    },
+    "probe_mac_address": {
+        "name": "Probe MAC address",
+        "keys": ("probeMacAddress", "macAddress", "mac"),
+    },
+    "probe_connected": {
+        "name": "Probe connected",
+        "keys": ("probeConnected", "connected", "isConnected"),
+    },
+    "probe_inserted": {
+        "name": "Probe inserted",
+        "keys": ("probeInserted", "inserted", "isInserted"),
+    },
+}
+
+
+class WhirlpoolThingShieldSensor(WhirlpoolApkEntity, SensorEntity):
+    """Diagnostic sensor for ThingShield appliance state payloads."""
+
+    _attr_entity_registry_enabled_default = False
+    _attr_icon = "mdi:chip"
+
+    def __init__(self, coordinator, appliance: Mapping[str, Any], key: str) -> None:
+        super().__init__(coordinator, appliance, key)
+        self._key = key
+        self._attr_translation_key = key
+        self._attr_name = entity_name_from_key(key, appliance)
+
+    @property
+    def native_value(self) -> Any | None:
+        value = find_key(self.flat_status, TS_SENSOR_CANDIDATES[self._key])
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, sort_keys=True)[:255]
+        return str(value).replace("_", " ").title() if isinstance(value, str) else value
+
+
+async def _async_accessory_entities(coordinator) -> list[SensorEntity]:
+    """Create accessory/probe entities from the account accessory list."""
+    try:
+        payload = await coordinator.client.request("GET", "/api/v1/accessory")
+    except Exception:  # noqa: BLE001 - accessory endpoint is optional per account/region
+        return []
+    entities: list[SensorEntity] = []
+    for accessory in _coerce_accessories(payload):
+        serial = _accessory_serial(accessory)
+        if not serial:
+            continue
+        for key, definition in ACCESSORY_SENSOR_DEFINITIONS.items():
+            entities.append(WhirlpoolAccessorySensor(coordinator, serial, accessory, key, definition))
+    return entities
+
+
+def _coerce_accessories(payload: Any) -> list[Mapping[str, Any]]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, Mapping)]
+    if isinstance(payload, Mapping):
+        for key in ("accessories", "items", "data", "results", "devices"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, Mapping)]
+        return [payload]
+    return []
+
+
+def _accessory_serial(accessory: Mapping[str, Any]) -> str | None:
+    flat = flatten(accessory)
+    for key in ("serialNumber", "probeSerialNumber", "serial", "id", "accessoryId", "macAddress"):
+        value = find_key(flat, (key,))
+        if value not in (None, "", 0):
+            return str(value)
+    return None
+
+
+class WhirlpoolAccessorySensor(SensorEntity):
+    """Sensor backed by Whirlpool accessory/probe status."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator, serial: str, initial: Mapping[str, Any], key: str, definition: Mapping[str, Any]) -> None:
+        self.coordinator = coordinator
+        self.serial = serial
+        self._key = key
+        self._definition = definition
+        self._payload: Mapping[str, Any] = initial
+        self._attr_unique_id = f"whirlpool_accessory_{serial}_{key}"
+        self._attr_name = str(definition["name"])
+        self._attr_icon = "mdi:thermometer-probe" if key.startswith("probe_") else None
+        self._attr_device_class = definition.get("device_class")
+        self._attr_native_unit_of_measurement = definition.get("unit")
+        self._attr_state_class = SensorStateClass.MEASUREMENT if self._attr_device_class in {SensorDeviceClass.TEMPERATURE, SensorDeviceClass.BATTERY} else None
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {("whirlpool_appliances", f"accessory_{self.serial}")},
+            "name": _accessory_name(self._payload, self.serial),
+            "manufacturer": "Whirlpool",
+            "model": _first_flat(self._payload, "model", "modelNumber", "type", "accessoryType"),
+            "sw_version": _first_flat(self._payload, "firmwareVersion", "probeFirmwareVersion", "softwareVersion"),
+        }
+
+    @property
+    def native_value(self) -> Any | None:
+        flat = flatten(self._payload)
+        value = _first_flat(flat, *self._definition["keys"])
+        if self._attr_device_class == SensorDeviceClass.TEMPERATURE:
+            return _normalize_temperature(value)
+        if self._attr_device_class == SensorDeviceClass.BATTERY:
+            return _normalize_number(value)
+        if isinstance(value, bool):
+            return "on" if value else "off"
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, sort_keys=True)[:255]
+        return value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"serial_number": self.serial, "status": self._payload}
+
+    async def async_update(self) -> None:
+        try:
+            payload = await self.coordinator.client.request("GET", f"/api/v1/accessory/{self.serial}")
+        except Exception:  # noqa: BLE001 - keep last known accessory state
+            return
+        if isinstance(payload, Mapping):
+            self._payload = payload
+
+
+def _accessory_name(payload: Mapping[str, Any], serial: str) -> str:
+    return str(_first_flat(payload, "name", "probeName", "accessoryName", "displayName") or f"KitchenAid Probe {serial}")
+
+
+def _first_flat(payload: Mapping[str, Any], *keys: str) -> Any | None:
+    flat = payload if all(not isinstance(v, (dict, list)) for v in payload.values()) else flatten(payload)
+    for key in keys:
+        value = find_key(flat, (key,))
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _normalize_number(value: Any) -> float | int | None:
+    if value in (None, ""):
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return int(numeric) if numeric.is_integer() else numeric
+
+
+def _normalize_temperature(value: Any) -> float | None:
+    numeric = _normalize_number(value)
+    if numeric is None:
+        return None
+    return float(numeric) / 10 if abs(float(numeric)) > 250 else float(numeric)

@@ -10,8 +10,76 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 
 from .api import WhirlpoolApiError, WhirlpoolCloudClient
-from .api_spec import APPLIANCE_FUNCTIONS
 from .const import DATA_CLIENT, DATA_COORDINATOR, DOMAIN
+
+
+# Keep the public service surface small and Home Assistant-like.  More specific
+# Whirlpool mobile-app endpoints are exposed through grouped actions instead of
+# one service per endpoint.
+SERVICE_NAMES = (
+    "call_api",
+    "send_appliance_command",
+    "set_attributes",
+    "oven_control",
+    "appliance_option",
+    "refresh",
+    "history",
+    "favorites",
+    "messages",
+    "feature",
+)
+
+OVEN_ACTIONS = {"set_cook", "set_frozen_bake", "stop"}
+OPTION_ACTIONS = {
+    "set_cavity_light",
+    "set_quiet_mode",
+    "set_remote_enable",
+    "set_kitchen_timer",
+    "stop_kitchen_timer",
+    "check_firmware_update",
+    "sync_time",
+    "set_time_auto_update",
+    "set_timezone",
+    "get_ac_filter_status",
+    "reset_ac_filter",
+}
+HISTORY_ACTIONS = {"cycle", "fault"}
+FAVORITE_ACTIONS = {"get", "delete"}
+MESSAGE_ACTIONS = {"list", "get", "dismiss"}
+FEATURE_ACTIONS = {
+    "update_appliances",
+    "get_ddm_content",
+    "get_accessories",
+    "get_accessory_status",
+    "get_accessory_cycle_history",
+    "get_accessory_cycle",
+    "get_accessory_cycle_lifecycle",
+    "get_accessory_favorites",
+    "save_accessory_cycle_favorite",
+    "delete_accessory_favorite",
+    "rename_accessory_favorite",
+    "update_accessory_favorite_notes",
+    "get_accessory_expert_cycle",
+    "enable_accessory_range_extender",
+    "get_accessory_ota_status",
+    "discover_scan_to_cook_recipes",
+    "search_recipe_by_upc",
+    "get_scan_to_cook_categories",
+    "get_scan_to_cook_category_recipes",
+    "send_ioc_recipe",
+    "cook_recipe",
+    "manage_recipe",
+    "get_rms_recipes",
+    "get_rms_recipe",
+    "get_rms_recipe_view",
+    "get_ts_ota_status",
+    "get_ts_ota_descriptor_status",
+    "get_ts_ota_descriptor",
+    "get_appliance_documents",
+    "get_thing_state",
+    "live_collect",
+    "get_video_capabilities",
+}
 
 
 def register_services(hass: HomeAssistant) -> None:
@@ -23,23 +91,26 @@ def register_services(hass: HomeAssistant) -> None:
         client = _first_client(hass)
         path = call.data["path"]
         if not path.startswith("/") and not path.startswith(client.base_url):
-            raise HomeAssistantError("Path must be a Whirlpool API path starting with '/' or the configured base URL")
-        return _response(await client.request(call.data.get("method", "GET"), path, json=call.data.get("body"), params=call.data.get("params"), auth=call.data.get("auth", True)))
+            raise HomeAssistantError("Path must start with '/' or the configured Whirlpool base URL")
+        return _response(
+            await client.request(
+                call.data.get("method", "GET"),
+                path,
+                json=call.data.get("body"),
+                params=call.data.get("params"),
+                auth=call.data.get("auth", True),
+            )
+        )
 
-    async def send_command(call: ServiceCall) -> dict[str, Any]:
+    async def send_appliance_command(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.send_appliance_command(_service_said(hass, call), call.data.get("command", "setAttributes"), call.data.get("attributes"), call.data.get("raw"))
+        result = await client.send_appliance_command(
+            _service_said(hass, call),
+            call.data.get("command", "setAttributes"),
+            call.data.get("attributes"),
+            call.data.get("raw"),
+        )
         await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result)
-
-    async def set_cavity_light(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        result = await client.set_cavity_light(_service_said(hass, call), _service_bool(call), call.data.get("cavity"))
-        await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result)
-
-    async def publish_thing_command(call: ServiceCall) -> dict[str, Any]:
-        result = await _first_coordinator(hass).async_publish_thing_command(_service_said(hass, call), call.data.get("command", "getState"), call.data.get("payload"))
         return _service_result(result)
 
     async def set_attributes(call: ServiceCall) -> dict[str, Any]:
@@ -48,219 +119,238 @@ def register_services(hass: HomeAssistant) -> None:
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
-    async def set_oven_cook(call: ServiceCall) -> dict[str, Any]:
+    async def oven_control(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.set_oven_cook(
-            _service_said(hass, call),
-            call.data["temperature"],
-            call.data.get("mode", "bake"),
-            call.data.get("cavity", "upper"),
-            cook_time_seconds=_minutes_to_seconds(call.data.get("cook_time_minutes")),
-            delay_time_seconds=_minutes_to_seconds(call.data.get("delay_time_minutes")),
-            complete_action=call.data.get("complete_action", "turn_off"),
-        )
+        said = _service_said(hass, call)
+        action = str(call.data["action"])
+        if action == "set_cook":
+            result = await client.set_oven_cook(
+                said,
+                call.data["temperature"],
+                call.data.get("mode", "bake"),
+                call.data.get("cavity", "upper"),
+                cook_time_seconds=_minutes_to_seconds(call.data.get("cook_time_minutes")),
+                delay_time_seconds=_minutes_to_seconds(call.data.get("delay_time_minutes")),
+                complete_action=call.data.get("complete_action", "turn_off"),
+            )
+        elif action == "set_frozen_bake":
+            result = await client.set_oven_frozen_bake(
+                said,
+                call.data["food"],
+                call.data["temperature"],
+                int(round(float(call.data["cook_time_minutes"]) * 60)),
+                call.data.get("cavity", "upper"),
+                complete_action=call.data.get("complete_action", "turn_off"),
+            )
+        elif action == "stop":
+            result = await client.stop_oven_cavity(said, call.data.get("cavity", "upper"))
+        else:
+            raise HomeAssistantError(f"Unsupported oven action: {action}")
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
-    async def set_oven_frozen_bake(call: ServiceCall) -> dict[str, Any]:
+    async def appliance_option(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        result = await client.set_oven_frozen_bake(_service_said(hass, call), call.data["food"], call.data["temperature"], int(round(float(call.data["cook_time_minutes"]) * 60)), call.data.get("cavity", "upper"), complete_action=call.data.get("complete_action", "turn_off"))
+        said = _service_said(hass, call)
+        action = str(call.data["action"])
+        if action == "set_cavity_light":
+            result = await client.set_cavity_light(said, _service_bool(call), call.data.get("cavity"))
+        elif action == "set_quiet_mode":
+            result = await client.set_quiet_mode(said, _service_bool(call))
+        elif action == "set_remote_enable":
+            result = await client.set_remote_enable(said, _service_bool(call))
+        elif action == "set_kitchen_timer":
+            result = await client.set_kitchen_timer(said, call.data["seconds"], call.data.get("timer", 1))
+        elif action == "stop_kitchen_timer":
+            result = await client.stop_kitchen_timer(said, call.data.get("timer", 1))
+        elif action == "check_firmware_update":
+            result = await client.check_firmware_update(said)
+        elif action == "sync_time":
+            result = await client.sync_appliance_time(said, call.data.get("timezone"))
+        elif action == "set_time_auto_update":
+            result = await client.set_time_auto_update(said, _service_bool(call), call.data.get("timezone"))
+        elif action == "set_timezone":
+            timezone = str(call.data["timezone"])
+            result = await client.send_attributes(said, {"TimeZoneId": timezone, "TimezoneId": timezone, "XCat_TimeZoneId": timezone})
+        elif action == "get_ac_filter_status":
+            result = await client.request("GET", f"/api/v1/ac/getACFilterStatus/{said}")
+        elif action == "reset_ac_filter":
+            body = dict(call.data.get("body") or {})
+            body.setdefault("said", said)
+            body.setdefault("saId", said)
+            result = await client.request("POST", "/api/v1/ac/resetACFilter", json=body)
+        else:
+            raise HomeAssistantError(f"Unsupported option action: {action}")
         await _first_coordinator(hass).async_request_refresh()
         return _service_result(result)
 
-    async def stop_oven_cavity(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        result = await client.stop_oven_cavity(_service_said(hass, call), call.data.get("cavity", "upper"))
-        await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result)
-
-    async def stop_microwave(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        result = await client.stop_microwave(_service_said(hass, call))
-        await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result)
-
-    async def set_quiet_mode(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        result = await client.set_quiet_mode(_service_said(hass, call), _service_bool(call))
-        await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result)
-
-    async def set_remote_enable(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        result = await client.set_remote_enable(_service_said(hass, call), _service_bool(call))
-        await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result)
-
-    async def set_kitchen_timer(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        result = await client.set_kitchen_timer(_service_said(hass, call), call.data["seconds"], call.data.get("timer", 1))
-        await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result)
-
-    async def stop_kitchen_timer(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        result = await client.stop_kitchen_timer(_service_said(hass, call), call.data.get("timer", 1))
-        await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result)
-
-    async def check_firmware_update(call: ServiceCall) -> dict[str, Any]:
-        return _service_result(await _first_client(hass).check_firmware_update(_service_said(hass, call)))
-
-    async def sync_time(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        result = await client.sync_appliance_time(_service_said(hass, call), call.data.get("timezone"))
-        await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result)
-
-    async def set_time_auto_update(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        result = await client.set_time_auto_update(_service_said(hass, call), call.data["enabled"], call.data.get("timezone"))
-        await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result)
-
-    async def set_timezone(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        timezone = str(call.data["timezone"])
-        result = await client.send_attributes(_service_said(hass, call), {"TimeZoneId": timezone, "TimezoneId": timezone, "XCat_TimeZoneId": timezone})
-        await _first_coordinator(hass).async_request_refresh()
-        return _service_result(result)
-
-    async def refresh(call: ServiceCall) -> None:
-        await _first_coordinator(hass).async_request_refresh()
-
-    async def refresh_ddm_capabilities(call: ServiceCall) -> dict[str, Any]:
+    async def refresh(call: ServiceCall) -> dict[str, Any] | None:
+        action = str(call.data.get("action", "status"))
         coordinator = _first_coordinator(hass)
-        await coordinator.async_fetch_ddm_capabilities(force=True)
-        data = dict(coordinator.data or {})
-        data["ddm_capabilities"] = coordinator._ddm_capabilities
-        data["ddm_errors"] = coordinator._ddm_errors
-        coordinator.async_set_updated_data(data)
-        return _response({"ddm_keys": list(coordinator._ddm_capabilities), "errors": coordinator._ddm_errors})
+        if action == "status":
+            await coordinator.async_request_refresh()
+            return None
+        if action == "ddm_capabilities":
+            await coordinator.async_fetch_ddm_capabilities(force=True)
+            data = dict(coordinator.data or {})
+            data["ddm_capabilities"] = coordinator._ddm_capabilities
+            data["ddm_errors"] = coordinator._ddm_errors
+            coordinator.async_set_updated_data(data)
+            return _response({"ddm_keys": list(coordinator._ddm_capabilities), "errors": coordinator._ddm_errors})
+        raise HomeAssistantError(f"Unsupported refresh action: {action}")
 
-    async def update_appliances(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        result = await client.request("POST", "/api/v2/updateAppliances", json=call.data.get("body"))
-        await _first_coordinator(hass).async_request_refresh()
-        return _response(result)
+    async def history(call: ServiceCall) -> dict[str, Any]:
+        action = str(call.data["action"])
+        path = "/api/v1/history/cycle" if action == "cycle" else "/api/v1/history/faultCode"
+        if action not in HISTORY_ACTIONS:
+            raise HomeAssistantError(f"Unsupported history action: {action}")
+        return _response(await _first_client(hass).request("GET", path, params=_history_params(hass, call) or None))
 
-    async def get_ddm_content(call: ServiceCall) -> dict[str, Any]:
-        ddm_key = str(call.data["ddm_key"])
-        return _response(await _first_client(hass).request("GET", f"/api/v1/contents/all/{ddm_key}"))
-
-    async def appliance_function(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        result = await client.call_function(call.data["function"], said=_service_said(hass, call), body=call.data.get("body"), **dict(call.data.get("path_values") or {}))
-        await _first_coordinator(hass).async_request_refresh()
-        return _response(result)
-
-    async def get_cycle_history(call: ServiceCall) -> dict[str, Any]:
-        return _response(await _first_client(hass).request("GET", "/api/v1/history/cycle", params=_history_params(hass, call) or None))
-
-    async def get_fault_history(call: ServiceCall) -> dict[str, Any]:
-        return _response(await _first_client(hass).request("GET", "/api/v1/history/faultCode", params=_history_params(hass, call) or None))
-
-    async def get_favorites(call: ServiceCall) -> dict[str, Any]:
+    async def favorites(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
         said = _service_said(hass, call)
-        try:
-            result = await client.request("GET", f"/api/v2/account/favorites/{said}")
-        except WhirlpoolApiError:
-            result = await client.request("GET", f"/api/v1/account/favorites/{said}")
+        action = str(call.data["action"])
+        if action == "get":
+            try:
+                result = await client.request("GET", f"/api/v2/account/favorites/{said}")
+            except WhirlpoolApiError:
+                result = await client.request("GET", f"/api/v1/account/favorites/{said}")
+        elif action == "delete":
+            result = await client.request("DELETE", f"/api/v3/account/favorites/{said}/{call.data['favorite_id']}")
+        else:
+            raise HomeAssistantError(f"Unsupported favorites action: {action}")
         return _response(result)
 
-    async def delete_favorite(call: ServiceCall) -> dict[str, Any]:
+    async def messages(call: ServiceCall) -> dict[str, Any]:
         client = _first_client(hass)
-        said = _service_said(hass, call)
-        favorite_id = str(call.data["favorite_id"])
-        return _response(await client.request("DELETE", f"/api/v3/account/favorites/{said}/{favorite_id}"))
+        action = str(call.data["action"])
+        if action == "list":
+            result = await client.request("GET", f"/api/v1/users/{await _user_id(client)}/messages")
+        elif action == "get":
+            result = await client.request("GET", f"/api/v1/messages/{call.data['message_id']}")
+        elif action == "dismiss":
+            result = await client.request("DELETE", f"/api/v1/users/{await _user_id(client)}/messages/{call.data['message_id']}")
+        else:
+            raise HomeAssistantError(f"Unsupported messages action: {action}")
+        return _response(result)
 
-    async def get_messages(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        return _response(await client.request("GET", f"/api/v1/users/{await _user_id(client)}/messages"))
-
-    async def get_message(call: ServiceCall) -> dict[str, Any]:
-        return _response(await _first_client(hass).request("GET", f"/api/v1/messages/{call.data['message_id']}"))
-
-    async def dismiss_message(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        user_id = await _user_id(client)
-        return _response(await client.request("DELETE", f"/api/v1/users/{user_id}/messages/{call.data['message_id']}"))
-
-    async def get_accessories(call: ServiceCall) -> dict[str, Any]:
-        return _response(await _first_client(hass).request("GET", "/api/v1/accessory"))
-
-    async def get_accessory_status(call: ServiceCall) -> dict[str, Any]:
-        serial_number = str(call.data["serial_number"])
-        return _response(await _first_client(hass).request("GET", f"/api/v1/accessory/{serial_number}"))
-
-    async def get_accessory_cycle_history(call: ServiceCall) -> dict[str, Any]:
-        return _response(await _first_client(hass).request("GET", "/api/v1/accessory/cycle-history", params=dict(call.data.get("params") or {}) or None))
-
-    async def get_accessory_ota_status(call: ServiceCall) -> dict[str, Any]:
-        return _response(await _first_client(hass).request("GET", "/api/v1/accessory/ota"))
-
-    async def live_collect(call: ServiceCall) -> dict[str, Any]:
-        return _response(await _first_client(hass).request("GET", f"/api/v1/live/collect/{_service_said(hass, call)}"))
-
-    async def get_ac_filter_status(call: ServiceCall) -> dict[str, Any]:
-        return _response(await _first_client(hass).request("GET", f"/api/v1/ac/getACFilterStatus/{_service_said(hass, call)}"))
-
-    async def reset_ac_filter(call: ServiceCall) -> dict[str, Any]:
-        client = _first_client(hass)
-        said = _service_said(hass, call)
-        body = dict(call.data.get("body") or {})
-        body.setdefault("said", said)
-        body.setdefault("saId", said)
-        result = await client.request("POST", "/api/v1/ac/resetACFilter", json=body)
-        await _first_coordinator(hass).async_request_refresh()
+    async def feature(call: ServiceCall) -> dict[str, Any]:
+        result = await _feature_response(hass, call)
         return _response(result)
 
     _register(hass, "call_api", call_api, vol.Schema({vol.Required("path"): str, vol.Optional("method", default="GET"): str, vol.Optional("body"): object, vol.Optional("params"): object, vol.Optional("auth", default=True): bool}))
-    _register(hass, "send_appliance_command", send_command, _said_schema({vol.Optional("command", default="setAttributes"): str, vol.Optional("attributes"): object, vol.Optional("raw"): object}))
-    _register(hass, "set_cavity_light", set_cavity_light, _said_schema({vol.Required("enabled"): bool, vol.Optional("on"): bool, vol.Optional("cavity"): str}))
-    _register(hass, "publish_thing_command", publish_thing_command, _said_schema({vol.Optional("command", default="getState"): str, vol.Optional("payload"): object}))
+    _register(hass, "send_appliance_command", send_appliance_command, _said_schema({vol.Optional("command", default="setAttributes"): str, vol.Optional("attributes"): object, vol.Optional("raw"): object}))
     _register(hass, "set_attributes", set_attributes, _said_schema({vol.Required("attributes"): dict}))
-    _register(hass, "set_oven_cook", set_oven_cook, _said_schema({vol.Required("temperature"): vol.Coerce(float), vol.Optional("mode", default="bake"): vol.In(["bake", "convect_bake", "convection_bake", "broil", "convect_broil", "convection_broil", "convect_roast", "convection_roast", "keep_warm", "air_fry"]), vol.Optional("cavity", default="upper"): vol.In(["upper", "lower"]), vol.Optional("cook_time_minutes"): vol.Coerce(float), vol.Optional("delay_time_minutes"): vol.Coerce(float), vol.Optional("complete_action", default="turn_off"): vol.In(["turn_off", "keep_warm", "stay_on"])}))
-    _register(hass, "set_oven_frozen_bake", set_oven_frozen_bake, _said_schema({vol.Required("food"): vol.In(["pizza", "pie", "meals", "fries", "nuggets", "lasagna"]), vol.Required("temperature"): vol.Coerce(float), vol.Required("cook_time_minutes"): vol.Coerce(float), vol.Optional("cavity", default="upper"): vol.In(["upper", "lower"]), vol.Optional("complete_action", default="turn_off"): vol.In(["turn_off", "keep_warm", "stay_on"])}))
-    _register(hass, "stop_oven_cavity", stop_oven_cavity, _said_schema({vol.Optional("cavity", default="upper"): vol.In(["upper", "lower"])}))
-    _register(hass, "stop_microwave", stop_microwave, _said_schema())
-    _register(hass, "set_quiet_mode", set_quiet_mode, _bool_schema())
-    _register(hass, "set_remote_enable", set_remote_enable, _bool_schema())
-    _register(hass, "set_kitchen_timer", set_kitchen_timer, _said_schema({vol.Required("seconds"): vol.Coerce(int), vol.Optional("timer", default=1): vol.Coerce(int)}))
-    _register(hass, "stop_kitchen_timer", stop_kitchen_timer, _said_schema({vol.Optional("timer", default=1): vol.Coerce(int)}))
-    _register(hass, "check_firmware_update", check_firmware_update, _said_schema())
-    _register(hass, "sync_time", sync_time, _said_schema({vol.Optional("timezone"): str}))
-    _register(hass, "set_time_auto_update", set_time_auto_update, _said_schema({vol.Required("enabled"): bool, vol.Optional("timezone"): str}))
-    _register(hass, "set_timezone", set_timezone, _said_schema({vol.Required("timezone"): str}))
-    hass.services.async_register(DOMAIN, "refresh", refresh)
-    _register(hass, "refresh_ddm_capabilities", refresh_ddm_capabilities, None)
-    _register(hass, "update_appliances", update_appliances, vol.Schema({vol.Optional("body"): object}))
-    _register(hass, "get_ddm_content", get_ddm_content, vol.Schema({vol.Required("ddm_key"): str}))
-    _register(hass, "appliance_function", appliance_function, _said_schema({vol.Required("function"): vol.In(list(APPLIANCE_FUNCTIONS)), vol.Optional("body"): object, vol.Optional("path_values"): object}))
-    _register(hass, "get_cycle_history", get_cycle_history, _history_schema())
-    _register(hass, "get_fault_history", get_fault_history, _history_schema())
-    _register(hass, "get_favorites", get_favorites, _said_schema())
-    _register(hass, "delete_favorite", delete_favorite, _said_schema({vol.Required("favorite_id"): str}))
-    _register(hass, "get_messages", get_messages, vol.Schema({}))
-    _register(hass, "get_message", get_message, vol.Schema({vol.Required("message_id"): str}))
-    _register(hass, "dismiss_message", dismiss_message, vol.Schema({vol.Required("message_id"): str}))
-    _register(hass, "get_accessories", get_accessories, vol.Schema({}))
-    _register(hass, "get_accessory_status", get_accessory_status, vol.Schema({vol.Required("serial_number"): str}))
-    _register(hass, "get_accessory_cycle_history", get_accessory_cycle_history, vol.Schema({vol.Optional("params"): dict}))
-    _register(hass, "get_accessory_ota_status", get_accessory_ota_status, vol.Schema({}))
-    _register(hass, "live_collect", live_collect, _said_schema())
-    _register(hass, "get_ac_filter_status", get_ac_filter_status, _said_schema())
-    _register(hass, "reset_ac_filter", reset_ac_filter, _said_schema({vol.Optional("body"): dict}))
+    _register(hass, "oven_control", oven_control, _said_schema({vol.Required("action"): vol.In(sorted(OVEN_ACTIONS)), vol.Optional("temperature"): vol.Coerce(float), vol.Optional("mode", default="bake"): str, vol.Optional("food"): str, vol.Optional("cook_time_minutes"): vol.Coerce(float), vol.Optional("delay_time_minutes"): vol.Coerce(float), vol.Optional("complete_action", default="turn_off"): str, vol.Optional("cavity", default="upper"): vol.In(["upper", "lower"])}))
+    _register(hass, "appliance_option", appliance_option, _said_schema({vol.Required("action"): vol.In(sorted(OPTION_ACTIONS)), vol.Optional("enabled"): bool, vol.Optional("on"): bool, vol.Optional("cavity"): str, vol.Optional("seconds"): vol.Coerce(int), vol.Optional("timer", default=1): vol.Coerce(int), vol.Optional("timezone"): str, vol.Optional("body"): dict}))
+    _register(hass, "refresh", refresh, vol.Schema({vol.Optional("action", default="status"): vol.In(["status", "ddm_capabilities"])}))
+    _register(hass, "history", history, _said_schema({vol.Required("action"): vol.In(sorted(HISTORY_ACTIONS)), vol.Optional("limit"): vol.Coerce(int), vol.Optional("params"): dict}))
+    _register(hass, "favorites", favorites, _said_schema({vol.Required("action"): vol.In(sorted(FAVORITE_ACTIONS)), vol.Optional("favorite_id"): str}))
+    _register(hass, "messages", messages, vol.Schema({vol.Required("action"): vol.In(sorted(MESSAGE_ACTIONS)), vol.Optional("message_id"): str}))
+    _register(hass, "feature", feature, _said_schema({vol.Required("action"): vol.In(sorted(FEATURE_ACTIONS)), vol.Optional("params"): dict, vol.Optional("body"): object, vol.Optional("ddm_key"): str, vol.Optional("serial_number"): str, vol.Optional("cycle_id"): str, vol.Optional("favorite_id"): str, vol.Optional("favorite_name"): str, vol.Optional("notes"): str, vol.Optional("query"): str, vol.Optional("upc"): str, vol.Optional("category"): str, vol.Optional("recipe_id"): str, vol.Optional("app", default="kitchenaid"): str, vol.Optional("filter_name"): str}))
 
 
 def unregister_services(hass: HomeAssistant) -> None:
     """Unregister Whirlpool Appliances services."""
-    for service in (
-        "call_api", "send_appliance_command", "set_cavity_light", "publish_thing_command", "set_attributes", "set_oven_cook", "set_oven_frozen_bake", "stop_oven_cavity", "stop_microwave", "set_quiet_mode", "set_remote_enable", "set_kitchen_timer", "stop_kitchen_timer", "check_firmware_update", "sync_time", "set_time_auto_update", "set_timezone", "refresh", "refresh_ddm_capabilities", "update_appliances", "get_ddm_content", "appliance_function", "get_cycle_history", "get_fault_history", "get_favorites", "delete_favorite", "get_messages", "get_message", "dismiss_message", "get_accessories", "get_accessory_status", "get_accessory_cycle_history", "get_accessory_ota_status", "live_collect", "get_ac_filter_status", "reset_ac_filter",
-    ):
+    for service in SERVICE_NAMES:
         if hass.services.has_service(DOMAIN, service):
             hass.services.async_remove(DOMAIN, service)
+
+
+async def _feature_response(hass: HomeAssistant, call: ServiceCall) -> Any:
+    client = _first_client(hass)
+    action = str(call.data["action"])
+    params = dict(call.data.get("params") or {}) or None
+    body = call.data.get("body")
+
+    if action == "update_appliances":
+        result = await client.request("POST", "/api/v2/updateAppliances", json=body)
+        await _first_coordinator(hass).async_request_refresh()
+        return result
+    if action == "get_ddm_content":
+        return await client.request("GET", f"/api/v1/contents/all/{call.data['ddm_key']}")
+    if action == "get_accessories":
+        return await client.request("GET", "/api/v1/accessory")
+    if action == "get_accessory_status":
+        return await client.request("GET", f"/api/v1/accessory/{call.data['serial_number']}")
+    if action == "get_accessory_cycle_history":
+        return await client.request("GET", "/api/v1/accessory/cycle-history", params=params)
+    if action == "get_accessory_cycle":
+        return await client.request("GET", f"/api/v1/accessory/cycle-history/{call.data['cycle_id']}")
+    if action == "get_accessory_cycle_lifecycle":
+        return await client.request("GET", "/api/v1/accessory/cycle-history/lifecycle/", params=params)
+    if action == "get_accessory_favorites":
+        return await client.request("GET", "/api/v1/accessory/cycle-history/favorites", params=params)
+    if action == "save_accessory_cycle_favorite":
+        return await client.request("POST", f"/api/v1/accessory/cycle-history/favorites/{call.data['cycle_id']}", json=body)
+    if action == "delete_accessory_favorite":
+        return await client.request("DELETE", f"/api/v1/accessory/cycle-history/favorites/delete/{call.data['favorite_id']}")
+    if action == "rename_accessory_favorite":
+        payload = dict(body or {})
+        if call.data.get("favorite_name") is not None:
+            payload.setdefault("name", call.data["favorite_name"])
+        return await client.request("PUT", f"/api/v1/accessory/cycle-history/favorites/name/{call.data['cycle_id']}", json=payload)
+    if action == "update_accessory_favorite_notes":
+        payload = dict(body or {})
+        if call.data.get("notes") is not None:
+            payload.setdefault("notes", call.data["notes"])
+        return await client.request("PUT", f"/api/v1/accessory/cycle-history/favorites/notes/{call.data['favorite_id']}", json=payload)
+    if action == "get_accessory_expert_cycle":
+        return await client.request("GET", f"/api/v1/accessory/expert/cycle/{call.data['cycle_id']}")
+    if action == "enable_accessory_range_extender":
+        return await client.request("POST", f"/api/v1/accessory/rangeextender/enable/{call.data['cycle_id']}", json=body)
+    if action == "get_accessory_ota_status":
+        return await client.request("GET", "/api/v1/accessory/ota")
+    if action == "discover_scan_to_cook_recipes":
+        return await client.request("GET", f"/api/v2/Scan2Cook/recipes/discover/{call.data['query']}", params=params)
+    if action == "search_recipe_by_upc":
+        return await client.request("GET", f"/api/v2/searchRecipe/{call.data['upc']}", params=params)
+    if action == "get_scan_to_cook_categories":
+        return await client.request("GET", "/api/v2/Scan2Cook/categories/recipes", params=params)
+    if action == "get_scan_to_cook_category_recipes":
+        return await client.request("GET", f"/api/v2/Scan2Cook/categories/{call.data['category']}/recipes", params=params)
+    if action == "send_ioc_recipe":
+        return await client.request("POST", f"/api/v1/send/iocrecipe/{_service_said(hass, call)}", json=body)
+    if action == "cook_recipe":
+        return await client.request("POST", f"/api/v2/cookRecipe/{_service_said(hass, call)}", json=body)
+    if action == "manage_recipe":
+        return await client.request("POST", f"/api/v1/manageRecipe/{_service_said(hass, call)}", json=body)
+    if action == "get_rms_recipes":
+        return await client.request("GET", f"/api/v1/rms/{call.data.get('app', 'kitchenaid')}/recipes", params=params)
+    if action == "get_rms_recipe":
+        return await client.request("GET", f"/api/v1/rms/{call.data.get('app', 'kitchenaid')}/recipes/{call.data['recipe_id']}", params=params)
+    if action == "get_rms_recipe_view":
+        return await client.request("GET", f"/api/v1/rms/{call.data.get('app', 'kitchenaid')}/views/{call.data['filter_name']}", params=params)
+    if action == "get_ts_ota_status":
+        return await client.request("GET", f"/api/v1/ts/ota/status/{_service_said(hass, call)}")
+    if action == "get_ts_ota_descriptor_status":
+        return await client.request("GET", f"/api/v1/ts/ota/descriptor/status/{_service_said(hass, call)}")
+    if action == "get_ts_ota_descriptor":
+        return await client.request("GET", "/api/v2/ts/ota/descriptor", params=params)
+    if action == "get_appliance_documents":
+        ddm_key = call.data.get("ddm_key")
+        if ddm_key:
+            return await client.request("GET", f"/api/v1/contents/all/{ddm_key}", params={"contentType": "documents"})
+        return await client.request("GET", "/api/v1/contents/all", params=params)
+    if action == "get_thing_state":
+        return await _first_coordinator(hass).async_publish_thing_command(_service_said(hass, call), "getState")
+    if action in {"live_collect", "get_video_capabilities"}:
+        result = await client.request("GET", f"/api/v1/live/collect/{_service_said(hass, call)}")
+        if action == "get_video_capabilities":
+            return {"video_capability_hints": _video_hints(result), "raw": result}
+        return result
+    raise HomeAssistantError(f"Unsupported feature action: {action}")
+
+
+def _video_hints(payload: Any) -> dict[str, Any]:
+    text = str(payload).lower()
+    return {
+        "mentions_camera": "camera" in text,
+        "mentions_kinesis": "kinesis" in text,
+        "mentions_webrtc": "webrtc" in text,
+        "mentions_stream": "stream" in text,
+        "mentions_ice_servers": "iceserver" in text or "ice_server" in text or "ice server" in text,
+    }
 
 
 def _register(hass: HomeAssistant, service: str, handler, schema: vol.Schema | None) -> None:
@@ -274,14 +364,6 @@ def _said_schema(extra: dict[Any, Any] | None = None) -> vol.Schema:
     data: dict[Any, Any] = {vol.Optional("appliance_device"): str, vol.Optional("said"): str}
     data.update(extra or {})
     return vol.Schema(data)
-
-
-def _bool_schema() -> vol.Schema:
-    return _said_schema({vol.Required("enabled"): bool, vol.Optional("on"): bool})
-
-
-def _history_schema() -> vol.Schema:
-    return _said_schema({vol.Optional("limit"): vol.Coerce(int), vol.Optional("params"): dict})
 
 
 def _first_client(hass: HomeAssistant) -> WhirlpoolCloudClient:
