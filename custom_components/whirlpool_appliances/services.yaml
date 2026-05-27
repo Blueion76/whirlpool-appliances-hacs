@@ -1,29 +1,33 @@
 call_api:
   name: Call Whirlpool API
-  description: Call a Whirlpool cloud API path discovered in the Android APK. Returns the decoded response.
+  description: Call a Whirlpool cloud API path and return the decoded response.
   fields:
     method:
+      name: Method
       required: false
       example: GET
       selector:
         select:
           options: [GET, POST, PUT, PATCH, DELETE]
     path:
+      name: Path
       required: true
       example: /api/v1/appliance/status/SAID_HERE
       selector:
         text:
     body:
+      name: Body
       required: false
       selector:
         object:
     params:
+      name: Query parameters
       required: false
       selector:
         object:
     auth:
       name: Send Authorization header
-      description: Turn off for public/static endpoints like /api/v1/contents/all/... that reject the normal OAuth Authorization header.
+      description: Turn off for endpoints that reject the normal OAuth Authorization header.
       required: false
       default: true
       selector:
@@ -33,57 +37,49 @@ send_appliance_command:
   name: Send appliance command
   description: Send a command through /api/v1/appliance/command.
   fields:
-    appliance_device:
+    appliance_device: &appliance_device_field
       name: Appliance device
       description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
       required: false
       selector:
         device:
           integration: whirlpool_appliances
-    said:
+    said: &said_field
       name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
+      description: Optional manual SAID override. Not needed if appliance device is selected.
       required: false
       selector:
         text:
     command:
+      name: Command
       required: false
       example: setAttributes
       selector:
         text:
     attributes:
+      name: Attributes
       required: false
       selector:
         object:
     raw:
+      name: Raw payload
       required: false
       selector:
         object:
 
 set_cavity_light:
   name: Set cavity light
-  description: Wrapper around the APK-observed setCavityLight/cavityLight command.
+  description: Turn an oven or microwave cavity light on or off.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
     enabled:
       name: Enabled
-      description: Turn this feature on or off.
       required: true
       selector:
         boolean:
     cavity:
+      name: Cavity
       required: false
       example: upper
       selector:
@@ -91,9 +87,10 @@ set_cavity_light:
 
 appliance_function:
   name: Appliance function
-  description: Call one of the named appliance functions mapped in api_spec.py.
+  description: Call a named appliance helper function from api_spec.py.
   fields:
     function:
+      name: Function
       required: true
       selector:
         select:
@@ -116,15 +113,15 @@ appliance_function:
             - manage_recipe
             - send_ioc_recipe
             - cook_recipe
-    said:
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
     body:
+      name: Body
       required: false
       selector:
         object:
     path_values:
+      name: Path values
       required: false
       selector:
         object:
@@ -133,30 +130,25 @@ refresh:
   name: Refresh Whirlpool data
   description: Refresh appliance list and status data now.
 
+refresh_ddm_capabilities:
+  name: Refresh DDM capabilities
+  description: Refresh Whirlpool Device Data Model capabilities and diagnostic errors.
+
 publish_thing_command:
   name: Publish ThingShield MQTT command
-  description: Publish a command to a TS_SAID / ThingShield appliance over AWS IoT MQTT. Use getState for a safe status request; other command payloads should match app/APK payloads.
+  description: Publish a command to a ThingShield appliance over AWS IoT MQTT.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
     command:
+      name: Command
       required: false
       default: getState
       example: getState
       selector:
         text:
     payload:
+      name: Payload
       required: false
       selector:
         object:
@@ -165,41 +157,20 @@ set_attributes:
   name: Set legacy appliance attributes
   description: Set raw legacy SAID attributes through /api/v1/appliance/command.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
     attributes:
+      name: Attributes
       required: true
       selector:
         object:
 
 set_oven_cook:
   name: Start oven cook cycle
-  description: Start or modify a Whirlpool legacy oven cavity cook cycle. Temperature is Celsius. Optional cook time, delay time, and complete action are DDM-backed.
+  description: Start or modify a Whirlpool legacy oven cavity cook cycle.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance device is selected.
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
     temperature:
       name: Temperature
       description: Target temperature in Celsius.
@@ -218,11 +189,17 @@ set_oven_cook:
         select:
           options:
             - bake
+            - convect_bake
+            - convection_bake
             - broil
+            - convect_broil
+            - convection_broil
+            - convect_roast
+            - convection_roast
             - keep_warm
+            - air_fry
     cook_time_minutes:
       name: Cook time
-      description: Optional oven cook time in minutes.
       required: false
       selector:
         number:
@@ -232,7 +209,6 @@ set_oven_cook:
           unit_of_measurement: min
     delay_time_minutes:
       name: Delay time
-      description: Optional delay start time in minutes.
       required: false
       selector:
         number:
@@ -242,7 +218,6 @@ set_oven_cook:
           unit_of_measurement: min
     complete_action:
       name: Complete action
-      description: What the oven should do when cook time completes.
       required: false
       default: turn_off
       selector:
@@ -263,21 +238,10 @@ set_oven_cook:
 
 set_oven_frozen_bake:
   name: Start Frozen Bake
-  description: Start a Whirlpool Frozen Bake automatic oven cycle. Temperature is Celsius and cook time is minutes.
+  description: Start a Whirlpool Frozen Bake automatic oven cycle.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance device is selected.
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
     food:
       name: Food
       required: true
@@ -292,7 +256,6 @@ set_oven_frozen_bake:
             - lasagna
     temperature:
       name: Temperature
-      description: Target temperature in Celsius.
       required: true
       selector:
         number:
@@ -302,7 +265,6 @@ set_oven_frozen_bake:
           unit_of_measurement: °C
     cook_time_minutes:
       name: Cook time
-      description: Required Frozen Bake cook time in minutes.
       required: true
       selector:
         number:
@@ -312,7 +274,6 @@ set_oven_frozen_bake:
           unit_of_measurement: min
     complete_action:
       name: Complete action
-      description: What the oven should do when cook time completes.
       required: false
       default: turn_off
       selector:
@@ -335,20 +296,10 @@ stop_oven_cavity:
   name: Stop oven cavity
   description: Cancel a Whirlpool legacy oven cavity cook cycle.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
     cavity:
+      name: Cavity
       required: false
       default: upper
       selector:
@@ -359,70 +310,50 @@ stop_oven_cavity:
 
 stop_microwave:
   name: Stop microwave
-  description: Cancel a Whirlpool legacy microwave operation on combo oven/microwave appliances.
+  description: Cancel a Whirlpool legacy microwave operation.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
-      required: false
-      selector:
-        text:
-
+    appliance_device: *appliance_device_field
+    said: *said_field
 
 sync_time:
   name: Sync appliance time
-  description: Enable Whirlpool app-style automatic time update using the localizedDateAndTimeForSaids endpoint. The app uses dateTimeMode 2 for auto-update on.
+  description: Sync appliance time with the Whirlpool cloud time endpoint.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
+    appliance_device: *appliance_device_field
+    said: *said_field
+    timezone:
+      name: Time zone
       required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
-      required: false
+      example: America/Chicago
       selector:
         text:
+
+set_timezone:
+  name: Set appliance time zone
+  description: Write the appliance time zone attributes.
+  fields:
+    appliance_device: *appliance_device_field
+    said: *said_field
     timezone:
-      required: false
+      name: Time zone
+      required: true
       example: America/Chicago
       selector:
         text:
 
 set_time_auto_update:
   name: Set time auto update
-  description: Turn Whirlpool app-style automatic time update on or off. Uses dateTimeMode 2 for on and dateTimeMode 4 for off.
+  description: Turn Whirlpool automatic time update on or off.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
     enabled:
       name: Enabled
-      description: Turn this feature on or off.
       required: true
       selector:
         boolean:
     timezone:
+      name: Time zone
       required: false
       example: America/Chicago
       selector:
@@ -430,22 +361,12 @@ set_time_auto_update:
 
 set_kitchen_timer:
   name: Set kitchen timer
-  description: Set/start the appliance on-screen kitchen timer. Whirlpool Android app sends KitchenTimer01_SetTimeSet in seconds and KitchenTimer01_SetOperations 2.
+  description: Set and start the appliance on-screen kitchen timer.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
     seconds:
+      name: Seconds
       required: true
       example: 600
       selector:
@@ -455,6 +376,7 @@ set_kitchen_timer:
           step: 1
           unit_of_measurement: s
     timer:
+      name: Timer
       required: false
       default: 1
       selector:
@@ -465,22 +387,12 @@ set_kitchen_timer:
 
 stop_kitchen_timer:
   name: Stop kitchen timer
-  description: Stop/cancel the appliance on-screen kitchen timer.
+  description: Stop or cancel the appliance on-screen kitchen timer.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
     timer:
+      name: Timer
       required: false
       default: 1
       selector:
@@ -491,75 +403,31 @@ stop_kitchen_timer:
 
 check_firmware_update:
   name: Check firmware update
-  description: Check Whirlpool cloud for firmware update availability using GET /api/v2/checkForFirmwareUpdate/{said}.
+  description: Check Whirlpool cloud for firmware update availability.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
 
 set_quiet_mode:
   name: Set quiet mode
-  description: Turn Whirlpool quiet mode on or off using Sys_OperationSetQuietModeEnabled.
+  description: Turn Whirlpool quiet mode on or off.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
     enabled:
       name: Enabled
-      description: Turn this feature on or off.
       required: true
       selector:
         boolean:
 
 set_remote_enable:
   name: Set remote enable
-  description: Attempt to turn Whirlpool remote enable on or off using XCat_RemoteSetRemoteControlEnable. Some appliances may reject this if the field is cloud read-only.
+  description: Attempt to turn Whirlpool remote enable on or off.
   fields:
-    appliance_device:
-      name: Appliance device
-      description: Select the Whirlpool appliance device. The integration resolves the SAID automatically.
-      required: false
-      selector:
-        device:
-          integration: whirlpool_appliances
-    said:
-      name: SAID
-      description: Optional manual SAID override. Not needed if appliance entity is selected.
-      required: false
-      selector:
-        text:
+    appliance_device: *appliance_device_field
+    said: *said_field
     enabled:
       name: Enabled
-      description: Turn this feature on or off.
       required: true
       selector:
         boolean:
-
-
-refresh_ddm_capabilities:
-  name: Refresh DDM capabilities
-  description: Fetch and cache Whirlpool DDM/capability payloads from /api/v1/contents/all/{ddmKey} for all discovered appliances.
-
-
-# Diagnostics are provided through Home Assistant's built-in diagnostics UI:
-# Settings > Devices & services > Whirlpool Appliances > three-dot menu > Download diagnostics.
