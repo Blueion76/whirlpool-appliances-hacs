@@ -217,7 +217,7 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
 
 
 class WhirlpoolStartMicrowaveButton(WhirlpoolApkButton):
-    """Send the pending microwave command to the appliance display."""
+    """Start microwave using locally selected mode/time/power options."""
 
     async def async_press(self) -> None:
         _LOGGER.debug("Pressing Whirlpool Start Microwave button: entity=%s said=%s", self.entity_id, self.said)
@@ -230,5 +230,20 @@ class WhirlpoolStartMicrowaveButton(WhirlpoolApkButton):
         raise_if_common_blocked(self.flat_status, microwave=True)
         options = microwave_local_options(self.coordinator, self.said)
         attrs = microwave_attrs(options)
-        _LOGGER.debug("Final Whirlpool microwave SetOnDisplay attributes: said=%s options=%s attrs=%s", self.said, summarize(options), summarize(attrs))
-        return await self.client.send_attributes(self.said, attrs)
+        operation_attrs = {"Mwo_OperationSetOperations": attrs.pop("Mwo_OperationSetOperations", "2")}
+
+        if attrs:
+            _LOGGER.debug(
+                "Applying Whirlpool microwave settings before start: said=%s options=%s attrs=%s",
+                self.said,
+                summarize(options),
+                summarize(attrs),
+            )
+            self._check_service_request(await self.client.send_attributes(self.said, attrs))
+
+        _LOGGER.debug(
+            "Applying Whirlpool microwave start operation: said=%s attrs=%s",
+            self.said,
+            summarize(operation_attrs),
+        )
+        return await self.client.send_attributes(self.said, operation_attrs)
