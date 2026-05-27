@@ -145,9 +145,57 @@ def _extract_said(payload: Any, headers: Mapping[str, str], known_saids: set[str
     return walk(payload)
 
 
+def _attribute_map_to_attributes(attribute_map: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """Convert WebSocket attributeMap into REST status attributes shape.
+
+    WebSocket MESSAGE payloads use:
+      {"attributeMap": {"Foo": "1"}}
+
+    Existing entities expect:
+      {"attributes": {"Foo": {"value": "1"}}}
+    """
+    attributes: dict[str, dict[str, Any]] = {}
+    for key, value in attribute_map.items():
+        if isinstance(value, Mapping) and "value" in value:
+            attributes[str(key)] = dict(value)
+        else:
+            attributes[str(key)] = {"value": value}
+    return attributes
+
+
 def _status_payload(payload: Any) -> dict[str, Any]:
     """Normalize variable socket payload shapes into a status dict."""
     if isinstance(payload, Mapping):
+        # Captured Whirlpool STOMP payload shape:
+        # {
+        #   "said": "...",
+        #   "attributeMap": {"Sys_OperationSetQuietModeEnabled": "1"},
+        #   "processedValueMap": {"additionalAttributes": {"ddmName": "..."}}
+        # }
+        attribute_map = payload.get("attributeMap")
+        if isinstance(attribute_map, Mapping) and attribute_map:
+            status = {
+                "attributes": _attribute_map_to_attributes(attribute_map),
+                "pushEnvelope": {k: v for k, v in payload.items() if k != "attributeMap"},
+            }
+            for key in ("said", "SAID", "platform", "cc_uri", "timestamp", "wcloud_msg_id"):
+                if payload.get(key) not in (None, "", [], {}):
+                    status[key] = payload[key]
+
+            processed = payload.get("processedValueMap")
+            if isinstance(processed, Mapping):
+                additional = processed.get("additionalAttributes")
+                previous = processed.get("previousValueMap")
+                if isinstance(additional, Mapping):
+                    ddm_name = additional.get("ddmName")
+                    if ddm_name:
+                        status.setdefault("dataModelKey", ddm_name)
+                        status.setdefault("ddmKey", ddm_name)
+                    status.setdefault("additionalAttributes", dict(additional))
+                if isinstance(previous, Mapping):
+                    status.setdefault("previousAttributes", _attribute_map_to_attributes(previous))
+            return status
+
         for key in ("status", "applianceStatus", "state", "payload", "data", "attributes"):
             value = payload.get(key)
             if isinstance(value, Mapping):
