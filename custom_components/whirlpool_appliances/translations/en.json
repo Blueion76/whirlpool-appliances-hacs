@@ -1,4 +1,553 @@
 {
+  "config": {
+    "step": {
+      "user": {
+        "title": "Whirlpool Appliances",
+        "description": "Enter your Whirlpool account details.",
+        "data": {
+          "username": "Email address",
+          "password": "Password",
+          "region": "Region",
+          "brand": "Brand",
+          "scan_interval": "Scan interval",
+          "expose_raw_sensors": "Expose raw status sensors"
+        },
+        "data_description": {
+          "scan_interval": "Polling interval in seconds. Use a higher value to reduce cloud requests.",
+          "expose_raw_sensors": "Create diagnostic raw-status sensors for troubleshooting."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate Whirlpool Appliances",
+        "description": "Update your Whirlpool cloud credentials.",
+        "data": {
+          "password": "Password",
+          "brand": "Brand"
+        }
+      }
+    },
+    "error": {
+      "account_locked": "The Whirlpool account is locked. Check the Whirlpool app or website.",
+      "cannot_connect": "Failed to connect to Whirlpool.",
+      "invalid_auth": "Invalid Whirlpool credentials.",
+      "no_appliances": "No Whirlpool appliances were found on this account.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This Whirlpool account is already configured.",
+      "reauth_successful": "Reauthentication was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Whirlpool Appliances options",
+        "data": {
+          "scan_interval": "Scan interval",
+          "expose_raw_sensors": "Expose raw status sensors"
+        },
+        "data_description": {
+          "scan_interval": "Polling interval in seconds.",
+          "expose_raw_sensors": "Create diagnostic raw-status sensors for troubleshooting."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "control_lock": {
+        "name": "Control lock"
+      },
+      "door": {
+        "name": "Door"
+      },
+      "error": {
+        "name": "Error"
+      },
+      "lower_door": {
+        "name": "Lower Oven door"
+      },
+      "lower_door_locked": {
+        "name": "Lower Oven door lock"
+      },
+      "lower_meat_probe": {
+        "name": "Lower Oven meat probe"
+      },
+      "online": {
+        "name": "Online"
+      },
+      "remote_control": {
+        "name": "Remote control"
+      },
+      "running": {
+        "name": "Running"
+      },
+      "sabbath_mode": {
+        "name": "Sabbath mode"
+      },
+      "upper_door": {
+        "name": "Oven door"
+      },
+      "upper_door_locked": {
+        "name": "Oven door lock"
+      },
+      "upper_meat_probe": {
+        "name": "Oven meat probe"
+      },
+      "firmware_update_available": {
+        "name": "Firmware update available"
+      },
+      "laundry_door_locked": {
+        "name": "Door locked"
+      },
+      "laundry_remote_start": {
+        "name": "Remote start"
+      },
+      "laundry_clean_washer": {
+        "name": "Clean washer reminder"
+      },
+      "laundry_control_lock": {
+        "name": "Control lock"
+      },
+      "dishwasher_door": {
+        "name": "Dishwasher door"
+      },
+      "refrigerator_door": {
+        "name": "Refrigerator door"
+      },
+      "refrigerator_filter_problem": {
+        "name": "Filter problem"
+      },
+      "refrigerator_vacation_mode": {
+        "name": "Vacation mode"
+      },
+      "ice_maker": {
+        "name": "Ice maker"
+      },
+      "ac_filter_problem": {
+        "name": "AC filter problem"
+      },
+      "microwave_door": {
+        "name": "Microwave door"
+      },
+      "microwave_running": {
+        "name": "Microwave running"
+      },
+      "microwave_light": {
+        "name": "Microwave light"
+      },
+      "microwave_turntable": {
+        "name": "Microwave turntable"
+      }
+    },
+    "button": {
+      "refresh_status": {
+        "name": "Refresh status"
+      },
+      "request_thing_state": {
+        "name": "Request ThingShield state"
+      },
+      "sync": {
+        "name": "Sync"
+      },
+      "sync_time": {
+        "name": "Sync time"
+      },
+      "stop_kitchen_timer_1": {
+        "name": "Stop kitchen timer 1"
+      },
+      "check_firmware_update": {
+        "name": "Check firmware update"
+      },
+      "start_upper_oven": {
+        "name": "Start Oven"
+      },
+      "start_lower_oven": {
+        "name": "Start Lower Oven"
+      },
+      "stop_upper_oven": {
+        "name": "Stop Oven"
+      },
+      "stop_lower_oven": {
+        "name": "Stop Lower Oven"
+      },
+      "start_microwave": {
+        "name": "Start microwave"
+      },
+      "stop_microwave": {
+        "name": "Stop microwave"
+      },
+      "reset_ac_filter": {
+        "name": "Reset AC filter"
+      }
+    },
+    "event": {
+      "message_center": {
+        "name": "Message center"
+      }
+    },
+    "climate": {
+      "climate": {
+        "name": "Climate"
+      },
+      "upper_climate": {
+        "name": "Upper oven"
+      },
+      "lower_climate": {
+        "name": "Lower oven"
+      },
+      "oven_climate": {
+        "name": "Oven"
+      },
+      "aircon_climate": {
+        "name": "Air conditioner"
+      }
+    },
+    "light": {
+      "cavity_light": {
+        "name": "Cavity light"
+      },
+      "lower_cavity_light": {
+        "name": "Lower Oven light"
+      },
+      "upper_cavity_light": {
+        "name": "Oven light"
+      },
+      "microwave_light": {
+        "name": "Microwave light"
+      }
+    },
+    "number": {
+      "lower_target_temperature_setpoint": {
+        "name": "Lower Oven target temperature setpoint"
+      },
+      "target_temperature_setpoint": {
+        "name": "Target temperature setpoint"
+      },
+      "upper_target_temperature_setpoint": {
+        "name": "Oven target temperature setpoint"
+      },
+      "kitchen_timer_1_set": {
+        "name": "Kitchen timer 1 set"
+      },
+      "upper_oven_cook_time": {
+        "name": "Oven cook time"
+      },
+      "upper_oven_delay_time": {
+        "name": "Oven delay time"
+      },
+      "lower_oven_cook_time": {
+        "name": "Lower oven cook time"
+      },
+      "lower_oven_delay_time": {
+        "name": "Lower oven delay time"
+      },
+      "display_brightness_percent": {
+        "name": "Display brightness"
+      },
+      "microwave_cook_time": {
+        "name": "Microwave cook time"
+      },
+      "microwave_cook_power": {
+        "name": "Microwave cook power"
+      },
+      "microwave_amount": {
+        "name": "Microwave amount"
+      },
+      "microwave_target_temperature": {
+        "name": "Microwave target temperature"
+      }
+    },
+    "select": {
+      "cycle_select": {
+        "name": "Cycle"
+      },
+      "refrigerator_temperature_level": {
+        "name": "Temperature level"
+      },
+      "oven_cook_mode": {
+        "name": "Oven cook mode"
+      },
+      "cook_mode_select": {
+        "name": "Oven cook mode"
+      },
+      "upper_cook_mode_select": {
+        "name": "Oven cook mode"
+      },
+      "lower_cook_mode_select": {
+        "name": "Lower oven cook mode"
+      },
+      "oven_complete_action": {
+        "name": "Oven complete action"
+      },
+      "upper_oven_complete_action": {
+        "name": "Oven complete action"
+      },
+      "lower_oven_complete_action": {
+        "name": "Lower oven complete action"
+      },
+      "frozen_bake_preset": {
+        "name": "Frozen Bake preset"
+      },
+      "upper_frozen_bake_preset": {
+        "name": "Frozen Bake preset"
+      },
+      "lower_frozen_bake_preset": {
+        "name": "Lower Frozen Bake preset"
+      },
+      "oven_clean_mode": {
+        "name": "Oven clean mode"
+      },
+      "upper_oven_clean_mode": {
+        "name": "Oven clean mode"
+      },
+      "lower_oven_clean_mode": {
+        "name": "Lower oven clean mode"
+      },
+      "display_language": {
+        "name": "Display language"
+      },
+      "temperature_units": {
+        "name": "Temperature units"
+      },
+      "keypress_tone_volume": {
+        "name": "Keypress tone volume"
+      },
+      "alert_tone_volume": {
+        "name": "Alert tone volume"
+      },
+      "microwave_mode": {
+        "name": "Microwave mode"
+      },
+      "microwave_preset": {
+        "name": "Microwave preset"
+      },
+      "microwave_doneness": {
+        "name": "Microwave doneness"
+      }
+    },
+    "sensor": {
+      "cook_mode": {
+        "name": "Cook mode"
+      },
+      "current_temperature": {
+        "name": "Current temperature"
+      },
+      "cycle": {
+        "name": "Cycle"
+      },
+      "fault_code": {
+        "name": "Fault code"
+      },
+      "filter_status": {
+        "name": "Filter status"
+      },
+      "humidity": {
+        "name": "Humidity"
+      },
+      "kitchen_timer_1_remaining": {
+        "name": "Kitchen timer 1 remaining"
+      },
+      "kitchen_timer_1_state": {
+        "name": "Kitchen timer 1 state"
+      },
+      "lower_cavity_state": {
+        "name": "Lower Oven state"
+      },
+      "lower_cook_mode": {
+        "name": "Lower Oven cook mode"
+      },
+      "lower_cook_time_elapsed": {
+        "name": "Lower Oven cook time elapsed"
+      },
+      "lower_cook_time_remaining": {
+        "name": "Lower Oven cook time remaining"
+      },
+      "lower_delay_time_remaining": {
+        "name": "Lower Oven delay time remaining"
+      },
+      "lower_cook_time_state": {
+        "name": "Lower Oven cook time state"
+      },
+      "lower_current_temperature": {
+        "name": "Lower Oven current temperature"
+      },
+      "lower_target_temperature": {
+        "name": "Lower Oven target temperature"
+      },
+      "phase": {
+        "name": "Phase"
+      },
+      "raw_status": {
+        "name": "Raw status"
+      },
+      "state": {
+        "name": "State"
+      },
+      "target_temperature": {
+        "name": "Target temperature"
+      },
+      "time_remaining": {
+        "name": "Time remaining"
+      },
+      "upper_cavity_state": {
+        "name": "Oven state"
+      },
+      "upper_cook_mode": {
+        "name": "Oven cook mode"
+      },
+      "upper_cook_time_elapsed": {
+        "name": "Oven cook time elapsed"
+      },
+      "upper_cook_time_remaining": {
+        "name": "Oven cook time remaining"
+      },
+      "upper_delay_time_remaining": {
+        "name": "Oven delay time remaining"
+      },
+      "upper_cook_time_state": {
+        "name": "Oven cook time state"
+      },
+      "upper_current_temperature": {
+        "name": "Oven current temperature"
+      },
+      "upper_target_temperature": {
+        "name": "Oven target temperature"
+      },
+      "end_time": {
+        "name": "End time"
+      },
+      "microwave_state": {
+        "name": "Microwave state"
+      },
+      "microwave_cook_time_state": {
+        "name": "Microwave cook time state"
+      },
+      "microwave_cook_time_elapsed": {
+        "name": "Microwave cook time elapsed"
+      },
+      "microwave_cook_power": {
+        "name": "Microwave cook power"
+      },
+      "microwave_cook_time_remaining": {
+        "name": "Microwave cook time remaining"
+      },
+      "microwave_cook_time_set": {
+        "name": "Microwave cook time set"
+      },
+      "microwave_current_temperature": {
+        "name": "Microwave current temperature"
+      },
+      "microwave_target_temperature": {
+        "name": "Microwave target temperature"
+      },
+      "laundry_state": {
+        "name": "Laundry state"
+      },
+      "laundry_cycle": {
+        "name": "Laundry cycle"
+      },
+      "laundry_phase": {
+        "name": "Laundry phase"
+      },
+      "laundry_time_remaining": {
+        "name": "Laundry time remaining"
+      },
+      "laundry_end_time": {
+        "name": "Laundry end time"
+      },
+      "system_version": {
+        "name": "System version"
+      },
+      "dishwasher_state": {
+        "name": "Dishwasher state"
+      },
+      "dishwasher_cycle": {
+        "name": "Dishwasher cycle"
+      },
+      "dishwasher_phase": {
+        "name": "Dishwasher phase"
+      },
+      "dishwasher_time_remaining": {
+        "name": "Dishwasher time remaining"
+      },
+      "refrigerator_temperature": {
+        "name": "Refrigerator temperature"
+      },
+      "freezer_temperature": {
+        "name": "Freezer temperature"
+      },
+      "refrigerator_target_temperature": {
+        "name": "Refrigerator target temperature"
+      },
+      "freezer_target_temperature": {
+        "name": "Freezer target temperature"
+      },
+      "refrigerator_filter_status": {
+        "name": "Filter status"
+      },
+      "ac_mode": {
+        "name": "AC mode"
+      },
+      "ac_fan_speed": {
+        "name": "AC fan speed"
+      },
+      "cooktop_state": {
+        "name": "Cooktop state"
+      }
+    },
+    "switch": {
+      "control_lock": {
+        "name": "Control lock"
+      },
+      "power": {
+        "name": "Power"
+      },
+      "sabbath_mode": {
+        "name": "Sabbath mode"
+      },
+      "time_auto_update": {
+        "name": "Time auto update"
+      },
+      "enable_24_hour_time": {
+        "name": "24-hour time"
+      },
+      "quiet_mode": {
+        "name": "Quiet mode"
+      },
+      "remote_enable": {
+        "name": "Remote enable"
+      },
+      "microwave_turntable": {
+        "name": "Microwave turntable"
+      },
+      "ac_quiet_mode": {
+        "name": "AC quiet mode"
+      },
+      "ac_turbo_mode": {
+        "name": "AC turbo mode"
+      },
+      "ac_eco_mode": {
+        "name": "AC eco mode"
+      },
+      "ac_display": {
+        "name": "AC display"
+      },
+      "ac_horizontal_louver_swing": {
+        "name": "AC horizontal louver swing"
+      }
+    },
+    "lock": {
+      "control_lock": {
+        "name": "Control lock"
+      }
+    },
+    "update": {
+      "firmware_update": {
+        "name": "Firmware"
+      }
+    }
+  },
   "services": {
     "call_api": {
       "name": "Call Whirlpool API",
@@ -596,17 +1145,41 @@
     }
   },
   "exceptions": {
-    "account_locked": {"message": "The Whirlpool account is locked."},
-    "appliances_fetch_failed": {"message": "Whirlpool setup did not find any appliances."},
-    "cannot_connect": {"message": "Failed to connect to Whirlpool."},
-    "invalid_auth": {"message": "Invalid Whirlpool credentials."},
-    "invalid_value_set": {"message": "The selected value is not valid for this appliance."},
-    "remote_control_off": {"message": "Remote control is off on the appliance."},
-    "control_lock_on": {"message": "Control lock is on. Turn control lock off before sending this request."},
-    "door_open": {"message": "The appliance door is open. Close the door before sending this request."},
-    "modify_not_allowed": {"message": "This cycle cannot be modified while it is running."},
-    "delay_change_not_allowed": {"message": "Delay time cannot be changed while the oven is running."},
-    "oven_active": {"message": "The oven is active. Stop the current cycle before changing this setting."},
-    "request_failed": {"message": "Whirlpool rejected the request."}
+    "account_locked": {
+      "message": "The Whirlpool account is locked. Check the Whirlpool app or website."
+    },
+    "appliances_fetch_failed": {
+      "message": "Whirlpool setup did not find any appliances."
+    },
+    "cannot_connect": {
+      "message": "Failed to connect to Whirlpool."
+    },
+    "invalid_auth": {
+      "message": "Invalid Whirlpool credentials."
+    },
+    "invalid_value_set": {
+      "message": "The selected value is not valid for this appliance."
+    },
+    "remote_control_off": {
+      "message": "Remote control is off on the appliance."
+    },
+    "control_lock_on": {
+      "message": "Control lock is on. Turn control lock off before sending this request."
+    },
+    "door_open": {
+      "message": "The appliance door is open. Close the door before sending this request."
+    },
+    "modify_not_allowed": {
+      "message": "This cycle cannot be modified while it is running."
+    },
+    "delay_change_not_allowed": {
+      "message": "Delay time cannot be changed while the oven is running."
+    },
+    "oven_active": {
+      "message": "The oven is active. Stop the current cycle before changing this setting."
+    },
+    "request_failed": {
+      "message": "Whirlpool rejected the request."
+    }
   }
 }
