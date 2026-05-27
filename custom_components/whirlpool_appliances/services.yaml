@@ -8,12 +8,7 @@ call_api:
       example: GET
       selector:
         select:
-          options:
-            - GET
-            - POST
-            - PUT
-            - PATCH
-            - DELETE
+          options: [GET, POST, PUT, PATCH, DELETE]
     path:
       name: Path
       required: true
@@ -120,6 +115,26 @@ refresh_ddm_capabilities:
   name: Refresh DDM capabilities
   description: Refresh Whirlpool Device Data Model capabilities and diagnostic errors.
 
+update_appliances:
+  name: Update appliances
+  description: Call Whirlpool's appliance update endpoint and refresh integration data.
+  fields:
+    body:
+      name: Body
+      required: false
+      selector:
+        object:
+
+get_ddm_content:
+  name: Get DDM content
+  description: Fetch Whirlpool content metadata for a Device Data Model key.
+  fields:
+    ddm_key:
+      name: DDM key
+      required: true
+      selector:
+        text:
+
 publish_thing_command:
   name: Publish ThingShield MQTT command
   description: Publish a command to a ThingShield appliance over AWS IoT MQTT.
@@ -173,17 +188,7 @@ set_oven_cook:
       default: bake
       selector:
         select:
-          options:
-            - bake
-            - convect_bake
-            - convection_bake
-            - broil
-            - convect_broil
-            - convection_broil
-            - convect_roast
-            - convection_roast
-            - keep_warm
-            - air_fry
+          options: [bake, convect_bake, convection_bake, broil, convect_broil, convection_broil, convect_roast, convection_roast, keep_warm, air_fry]
     cook_time_minutes:
       name: Cook time
       required: false
@@ -208,19 +213,14 @@ set_oven_cook:
       default: turn_off
       selector:
         select:
-          options:
-            - turn_off
-            - keep_warm
-            - stay_on
+          options: [turn_off, keep_warm, stay_on]
     cavity:
       name: Cavity
       required: false
       default: upper
       selector:
         select:
-          options:
-            - upper
-            - lower
+          options: [upper, lower]
 
 set_oven_frozen_bake:
   name: Start Frozen Bake
@@ -233,13 +233,7 @@ set_oven_frozen_bake:
       required: true
       selector:
         select:
-          options:
-            - pizza
-            - pie
-            - meals
-            - fries
-            - nuggets
-            - lasagna
+          options: [pizza, pie, meals, fries, nuggets, lasagna]
     temperature:
       name: Temperature
       required: true
@@ -264,19 +258,14 @@ set_oven_frozen_bake:
       default: turn_off
       selector:
         select:
-          options:
-            - turn_off
-            - keep_warm
-            - stay_on
+          options: [turn_off, keep_warm, stay_on]
     cavity:
       name: Cavity
       required: false
       default: upper
       selector:
         select:
-          options:
-            - upper
-            - lower
+          options: [upper, lower]
 
 stop_oven_cavity:
   name: Stop oven cavity
@@ -290,9 +279,7 @@ stop_oven_cavity:
       default: upper
       selector:
         select:
-          options:
-            - upper
-            - lower
+          options: [upper, lower]
 
 stop_microwave:
   name: Stop microwave
@@ -500,3 +487,57 @@ dismiss_message:
       required: true
       selector:
         text:
+
+get_accessories:
+  name: Get accessories
+  description: Fetch Whirlpool account accessories.
+
+get_accessory_status:
+  name: Get accessory status
+  description: Fetch status/details for a Whirlpool accessory by serial number.
+  fields:
+    serial_number:
+      name: Serial number
+      required: true
+      selector:
+        text:
+
+get_accessory_cycle_history:
+  name: Get accessory cycle history
+  description: Fetch Whirlpool accessory cycle history.
+  fields:
+    params:
+      name: Query parameters
+      required: false
+      selector:
+        object:
+
+get_accessory_ota_status:
+  name: Get accessory OTA status
+  description: Fetch Whirlpool accessory OTA status.
+
+live_collect:
+  name: Live collect
+  description: Fetch live diagnostic collection data for an appliance.
+  fields:
+    appliance_device: *appliance_device_field
+    said: *said_field
+
+get_ac_filter_status:
+  name: Get AC filter status
+  description: Fetch AC filter status for the selected appliance.
+  fields:
+    appliance_device: *appliance_device_field
+    said: *said_field
+
+reset_ac_filter:
+  name: Reset AC filter
+  description: Reset AC filter status for the selected appliance.
+  fields:
+    appliance_device: *appliance_device_field
+    said: *said_field
+    body:
+      name: Body
+      required: false
+      selector:
+        object:
