@@ -246,7 +246,7 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             statuses: dict[str, Any] = {}
 
             if self._thing_started:
-                await self.thing_manager.ensure_connected(self._thing_saids(appliances))
+                await self.thing_manager.ensure_connected()
             if self._legacy_push_started:
                 await self.legacy_push_manager.ensure_connected()
 
@@ -332,12 +332,25 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return saids
 
     def _merge_thing_metadata(self) -> None:
-        """Copy ThingShield metadata into latest appliance records."""
+        """Copy available ThingShield runtime metadata into latest appliance records."""
+        runtimes = getattr(self.thing_manager, "runtimes", {}) or {}
+        explicit_metadata = getattr(self.thing_manager, "metadata", {}) or {}
         for appliance in self._latest_appliances:
             said = appliance_said(appliance)
             if not said:
                 continue
-            metadata = self.thing_manager.metadata.get(said)
+            metadata: dict[str, Any] = dict(explicit_metadata.get(said) or {})
+            runtime = runtimes.get(said)
+            if runtime is not None:
+                info = getattr(runtime, "info", None)
+                metadata.setdefault("model", getattr(runtime, "model", None))
+                metadata.setdefault("model_hints", list(getattr(runtime, "model_hints", ()) or ()))
+                if info is not None:
+                    for key in ("model", "brand", "category", "serial", "name", "thing_id"):
+                        value = getattr(info, key, None)
+                        if value not in (None, "", [], {}):
+                            metadata[key] = value
+            metadata = {key: value for key, value in metadata.items() if value not in (None, "", [], {})}
             if metadata:
                 appliance.setdefault("thing_metadata", metadata)
                 self._appliance_metadata[said] = metadata
