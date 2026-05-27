@@ -184,7 +184,7 @@ def register_services(hass: HomeAssistant) -> None:
         coordinator = _first_coordinator(hass)
         if action == "status":
             await coordinator.async_request_refresh()
-            return None
+            return _response({"status": "refreshed"})
         if action == "ddm_capabilities":
             await coordinator.async_fetch_ddm_capabilities(force=True)
             data = dict(coordinator.data or {})
