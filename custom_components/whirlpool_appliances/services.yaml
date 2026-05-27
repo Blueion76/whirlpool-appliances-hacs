@@ -93,26 +93,7 @@ appliance_function:
       name: Function
       required: true
       selector:
-        select:
-          options:
-            - get_status
-            - sync
-            - send_command
-            - create_reminder
-            - get_channel
-            - get_favorites
-            - get_favorites_v2
-            - delete_favorite
-            - get_ac_filter_status
-            - reset_ac_filter
-            - check_firmware
-            - ota_descriptor_status
-            - ota_status
-            - esp
-            - live_collect
-            - manage_recipe
-            - send_ioc_recipe
-            - cook_recipe
+        text:
     appliance_device: *appliance_device_field
     said: *said_field
     body:
@@ -190,7 +171,7 @@ set_oven_cook:
           options:
             - bake
             - convect_bake
-            - convection_bake
+            - convolution_bake
             - broil
             - convect_broil
             - convection_broil
