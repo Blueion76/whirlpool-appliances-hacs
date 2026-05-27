@@ -231,7 +231,6 @@ BINARY_DESCRIPTIONS: tuple[WhirlpoolApkBinarySensorDescription, ...] = (
     WhirlpoolApkBinarySensorDescription(key="upper_meat_probe", translation_key="upper_meat_probe", value_fn=_bool_attr("OvenUpperCavity_AlertStatusMeatProbePluggedIn"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(key="lower_meat_probe", translation_key="lower_meat_probe", value_fn=_bool_attr("OvenLowerCavity_AlertStatusMeatProbePluggedIn"), cooking_only=True),
     WhirlpoolApkBinarySensorDescription(key="microwave_door", translation_key="microwave_door", device_class=BinarySensorDeviceClass.DOOR, value_fn=_bool_attr("Mwo_OperationStatusDoorOpen"), cooking_only=True, microwave_only=True),
-    WhirlpoolApkBinarySensorDescription(key="microwave_running", translation_key="microwave_running", icon="mdi:power-off", device_class=BinarySensorDeviceClass.RUNNING, value_fn=lambda flat: (None if (s := attr_value(flat, "Mwo_OperationStatusState")) is None else str(s) in {"1", "2", "3", "6", "8", "9", "10", "running", "cooking"}), cooking_only=True, microwave_only=True),
     WhirlpoolApkBinarySensorDescription(key="microwave_light", translation_key="microwave_light", value_fn=_bool_attr("Mwo_DisplaySetLightOn"), cooking_only=True, microwave_only=True, entity_registry_enabled_default=False),
     WhirlpoolApkBinarySensorDescription(key="microwave_turntable", translation_key="microwave_turntable", value_fn=_bool_attr("Mwo_CycleSetTurntable"), cooking_only=True, microwave_only=True),
 )
