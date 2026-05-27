@@ -2,7 +2,7 @@
 
 Home Assistant custom integration (HACS) for Whirlpool cloud-connected appliances.
 
-> **Disclaimer**: This project is unofficial and is not affiliated with, endorsed by, or supported by Whirlpool Corporation.
+> **Disclaimer**: This project is unofficial and is not affiliated with, endorsed by, or supported by Whirlpool Corporation. Made with AI.
 
 ## Supported brands
 
