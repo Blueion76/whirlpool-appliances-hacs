@@ -23,7 +23,7 @@ from .helpers.control import (
     oven_is_active,
     raise_if_common_blocked,
 )
-from .entity import WhirlpoolApkEntity, entity_name_from_key, is_cooking_appliance, microwave_exists, oven_cavity_exists
+from .entity import WhirlpoolApkEntity, entity_name_from_key, is_aircon_appliance, is_cooking_appliance, microwave_exists, oven_cavity_exists
 from .helpers.logging import summarize
 from .helpers.oven_options import current_oven_options, minutes_to_seconds
 
@@ -33,10 +33,6 @@ _LOGGER = logging.getLogger(__name__)
 @dataclass(frozen=True, kw_only=True)
 class WhirlpoolButtonDescription(ButtonEntityDescription):
     press_fn: Callable[[Any, str], Awaitable[Any]]
-
-
-async def _sync(client, said: str):
-    return await client.sync_appliance(said)
 
 
 async def _refresh_status(client, said: str):
@@ -83,10 +79,10 @@ async def _check_firmware_update(client, said: str):
     return await client.check_firmware_update(said)
 
 
-# Do not expose the legacy /api/v1/appliance/{said}/sync endpoint as a button.
-# On Minerva cooking appliances Whirlpool returns 404 for that endpoint, even
-# though /api/v1/appliance/{said} and STOMP updates work. Keep the method
-# available for diagnostics/services, but avoid a broken entity in HA.
+async def _reset_ac_filter(client, said: str):
+    return await client.request("POST", "/api/v1/ac/resetACFilter", json={"said": said, "saId": said})
+
+
 BUTTONS = (
     WhirlpoolButtonDescription(key="refresh_status", translation_key="refresh_status", icon="mdi:cloud-refresh-variant", press_fn=_refresh_status),
     WhirlpoolButtonDescription(key="sync_time", translation_key="sync_time", icon="mdi:cloud-clock", press_fn=_sync_time),
@@ -96,6 +92,10 @@ BUTTONS = (
 
 THING_BUTTONS = (
     WhirlpoolButtonDescription(key="request_thing_state", translation_key="request_thing_state", press_fn=_request_thing_state),
+)
+
+AC_BUTTONS = (
+    WhirlpoolButtonDescription(key="reset_ac_filter", translation_key="reset_ac_filter", icon="mdi:air-filter", press_fn=_reset_ac_filter),
 )
 
 COOKING_BUTTONS = (
@@ -121,6 +121,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry,
             continue
         for desc in BUTTONS:
             entities.append(WhirlpoolApkButton(coordinator, appliance, desc))
+        if is_aircon_appliance(appliance):
+            for desc in AC_BUTTONS:
+                entities.append(WhirlpoolApkButton(coordinator, appliance, desc))
         if is_cooking_appliance(appliance):
             flat = WhirlpoolApkEntity(coordinator, appliance, "_probe").flat_status
             has_mwo = microwave_exists(flat)
@@ -165,10 +168,6 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
     def __init__(self, coordinator, appliance: Mapping[str, Any], description: WhirlpoolButtonDescription, cavity: str) -> None:
         self.cavity = cavity
         super().__init__(coordinator, appliance, description)
-
-        # Microwave/oven combos normally expose a single oven cavity named
-        # "upper" in the raw API. In Home Assistant that reads awkwardly as
-        # "Start Upper Oven", so show "Start Oven" when there is no lower oven.
         if cavity == "upper" and not oven_cavity_exists(self.flat_status, "lower"):
             self._attr_name = "Start Oven"
 
@@ -211,8 +210,6 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
             cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")),
             delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
             complete_action=str(options["complete_action"]),
-            # User-confirmed value for idle remote-start/stage behavior: SetOnDisplay.
-            # Running changes still use Modify.
             operation="4" if active else "3",
         )
         _LOGGER.debug("Final Whirlpool oven %s attributes: said=%s cavity=%s attrs=%s", "modify" if active else "set_on_display", self.said, self.cavity, summarize(attrs))
