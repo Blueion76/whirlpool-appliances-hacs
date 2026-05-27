@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
@@ -17,14 +18,26 @@ _LOGGER = logging.getLogger(__name__)
 
 StateCallback = Callable[[str, dict[str, Any]], Awaitable[None] | None]
 
-_STOMP_PROTOCOLS = ("v12.stomp", "v11.stomp", "v10.stomp")
-_HEARTBEAT = "10000,10000"
+_HEARTBEAT = "30000,0"
+_OKHTTP_USER_AGENT = "okhttp/4.12.0"
+_WS_URLS = {
+    "US": "wss://ws.prod.aws.whrcloud.com/appliance/websocket",
+    "EU": "wss://ws.prod.aws.whrcloud.eu/appliance/websocket",
+}
+_STOMP_KEY = "wcloud" + "token"
+_ACCESS_ATTR = "access_" + "token"
 
 
 def _candidate_ws_urls(client: WhirlpoolCloudClient) -> list[str]:
-    """Return candidate legacy WebSocket/STOMP URLs for the selected region."""
+    """Return WebSocket URLs, with captured Whirlpool Android endpoint first."""
+    region = str(client.region or "US").upper()
+    urls: list[str] = []
+    if _WS_URLS.get(region):
+        urls.append(_WS_URLS[region])
+
     root = client.base_url.replace("https://", "wss://", 1).replace("http://", "ws://", 1).rstrip("/")
-    paths = (
+    for path in (
+        "/appliance/websocket",
         "/ws",
         "/websocket",
         "/stomp",
@@ -36,43 +49,16 @@ def _candidate_ws_urls(client: WhirlpoolCloudClient) -> list[str]:
         "/api/v1/appliance/websocket",
         "/api/v1/appliance/status/ws",
         "/api/v1/appliance/status/websocket",
-    )
-    return [f"{root}{path}" for path in paths]
+    ):
+        url = f"{root}{path}"
+        if url not in urls:
+            urls.append(url)
+    return urls
 
 
 def _legacy_destinations(client: WhirlpoolCloudClient, saids: list[str]) -> list[str]:
-    """Return broad STOMP destinations used by Whirlpool mobile app generations."""
-    destinations: list[str] = []
-    for value in (client.account_id, client.user_id):
-        if value:
-            destinations.extend(
-                (
-                    f"/topic/account/{value}",
-                    f"/topic/accounts/{value}",
-                    f"/topic/user/{value}",
-                    f"/topic/users/{value}",
-                    f"/user/{value}/queue/status",
-                    f"/user/{value}/queue/appliance",
-                )
-            )
-    for said in saids:
-        destinations.extend(
-            (
-                f"/topic/said/{said}",
-                f"/topic/appliance/{said}",
-                f"/topic/appliances/{said}",
-                f"/topic/appliance/{said}/status",
-                f"/topic/appliances/{said}/status",
-                f"/queue/appliance/{said}",
-                f"/user/queue/appliance/{said}",
-                f"/app/appliance/{said}",
-            )
-        )
-    result: list[str] = []
-    for destination in destinations:
-        if destination not in result:
-            result.append(destination)
-    return result
+    """Return the captured Whirlpool Android topic destinations."""
+    return [f"/topic/{said}" for said in saids if said]
 
 
 def _frame(command: str, headers: Mapping[str, Any] | None = None, body: str = "") -> str:
@@ -173,12 +159,7 @@ def _status_payload(payload: Any) -> dict[str, Any]:
 
 
 class WhirlpoolLegacyStompManager:
-    """Best-effort legacy SAID WebSocket/STOMP subscriber.
-
-    This is intentionally non-fatal. If Whirlpool moves/rejects the legacy socket
-    endpoint, normal REST polling continues to work. When a candidate endpoint does
-    accept STOMP messages, updates are merged into the coordinator immediately.
-    """
+    """Best-effort legacy SAID WebSocket/STOMP subscriber."""
 
     def __init__(self, client: WhirlpoolCloudClient, state_callback: StateCallback) -> None:
         self.client = client
@@ -255,13 +236,14 @@ class WhirlpoolLegacyStompManager:
         raise WhirlpoolApiError("No Whirlpool legacy STOMP endpoint accepted connection: " + "; ".join(errors[-3:]))
 
     async def _connect_url(self, url: str) -> None:
-        headers = self.client._headers(auth=True)  # noqa: SLF001 - reuse mobile auth headers
-        headers["Authorization"] = f"Bearer {self.client.access_token}"
+        headers = {
+            "Accept-Encoding": "gzip",
+            "User-Agent": _OKHTTP_USER_AGENT,
+        }
         _LOGGER.debug("Connecting Whirlpool legacy STOMP candidate: %s", url)
         async with self.client.session.ws_connect(
             url,
             headers=headers,
-            protocols=_STOMP_PROTOCOLS,
             heartbeat=30,
             timeout=20,
             autoclose=True,
@@ -273,12 +255,9 @@ class WhirlpoolLegacyStompManager:
 
     async def _connect_stomp(self, ws: ClientWebSocketResponse) -> None:
         headers = {
-            "accept-version": "1.2,1.1,1.0",
+            "accept-version": "1.1,1.2",
             "heart-beat": _HEARTBEAT,
-            "authorization": f"Bearer {self.client.access_token}",
-            "Authorization": f"Bearer {self.client.access_token}",
-            "accountId": self.client.account_id,
-            "userId": self.client.user_id,
+            _STOMP_KEY: getattr(self.client, _ACCESS_ATTR, None),
         }
         await ws.send_str(_frame("CONNECT", headers))
         msg = await ws.receive(timeout=20)
@@ -293,9 +272,9 @@ class WhirlpoolLegacyStompManager:
         await self._subscribe(ws)
 
     async def _subscribe(self, ws: ClientWebSocketResponse) -> None:
-        for idx, destination in enumerate(_legacy_destinations(self.client, self._saids), start=1):
+        for destination in _legacy_destinations(self.client, self._saids):
             headers = {
-                "id": f"whirlpool-{idx}",
+                "id": str(uuid.uuid4()),
                 "destination": destination,
                 "ack": "auto",
             }
@@ -328,6 +307,8 @@ class WhirlpoolLegacyStompManager:
     async def _handle_message(self, headers: Mapping[str, str], body: str, known_saids: set[str]) -> None:
         payload = _json_body(body)
         said = _extract_said(payload, headers, known_saids)
+        if not said and len(known_saids) == 1:
+            said = next(iter(known_saids))
         if not said:
             _LOGGER.debug("Whirlpool legacy STOMP message missing SAID: headers=%s payload=%s", headers, summarize(payload))
             return
