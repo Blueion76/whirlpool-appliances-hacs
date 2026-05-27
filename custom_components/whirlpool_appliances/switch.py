@@ -37,10 +37,6 @@ async def _set_power(client, said: str, on: bool):
     return await client.set_power(said, on)
 
 
-async def _set_remote_enable(client, said: str, on: bool):
-    return await client.set_remote_enable(said, on)
-
-
 async def _set_sabbath(client, said: str, on: bool):
     return await client.set_oven_sabbath_mode(said, on)
 
@@ -83,7 +79,6 @@ async def _set_enable_24_hour(client, said: str, on: bool):
 
 SWITCHES = (
     WhirlpoolSwitchDescription(key="power", translation_key="power", entity_registry_enabled_default=False, value_fn=lambda flat: _to_bool(find_key(flat, ("powerOn", "power", "isOn"))), set_fn=_set_power, non_cooking_only=True),
-    WhirlpoolSwitchDescription(key="remote_enable", translation_key="remote_enable", icon="mdi:cloud-check-variant", value_fn=lambda flat: _to_bool(attr_value(flat, "XCat_RemoteSetRemoteControlEnable")), set_fn=_set_remote_enable, cooking_only=True),
     WhirlpoolSwitchDescription(key="sabbath_mode", translation_key="sabbath_mode", icon="mdi:candelabra-fire", entity_registry_enabled_default=False, value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OperationSetSabbathModeEnabled")), set_fn=_set_sabbath, cooking_only=True),
     WhirlpoolSwitchDescription(key="quiet_mode", translation_key="quiet_mode", icon="mdi:volume-high", value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_OperationSetQuietModeEnabled")), set_fn=_set_quiet_mode, cooking_only=True),
     WhirlpoolSwitchDescription(key="enable_24_hour_time", translation_key="enable_24_hour_time", icon="mdi:clock-digital", value_fn=lambda flat: _to_bool(attr_value(flat, "Sys_DisplaySetEnable24Hour")), set_fn=_set_enable_24_hour, cooking_only=True),
