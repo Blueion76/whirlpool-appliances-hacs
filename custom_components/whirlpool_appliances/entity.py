@@ -472,10 +472,10 @@ class WhirlpoolApkEntity(CoordinatorEntity[WhirlpoolApkCoordinator]):
         if isinstance(online, str) and online.lower() in ("0", "false", "offline", "disconnected"):
             available = False
         if not available and not self._unavailable_logged:
-            _LOGGER.info("Whirlpool entity %s is unavailable", self._attr_unique_id)
+            _LOGGER.debug("Whirlpool entity %s is unavailable", self._attr_unique_id)
             self._unavailable_logged = True
         elif available and self._unavailable_logged:
-            _LOGGER.info("Whirlpool entity %s is back online", self._attr_unique_id)
+            _LOGGER.debug("Whirlpool entity %s is back online", self._attr_unique_id)
             self._unavailable_logged = False
         return available
 
