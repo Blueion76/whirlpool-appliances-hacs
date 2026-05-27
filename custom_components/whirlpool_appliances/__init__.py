@@ -98,6 +98,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: WhirlpoolApkConfigEntry
         entries = hass.data.get(DOMAIN, {})
         entries.pop(entry.entry_id, None)
         if not entries:
+            hass.data.pop(DOMAIN, None)
             _unregister_services(hass)
     return unload_ok
 

@@ -23,14 +23,9 @@ jobs:
       - name: Install Ruff
         run: pip install ruff
       - name: Ruff format (check)
-        run: ruff format --check custom_components/whirlpool_appliances/config_flow.py
+        run: ruff format --check .
       - name: Ruff lint
-        run: |
-          ruff check \
-            custom_components/whirlpool_appliances/__init__.py \
-            custom_components/whirlpool_appliances/config_flow.py \
-            custom_components/whirlpool_appliances/entity.py \
-            custom_components/whirlpool_appliances/sensor.py
+        run: ruff check .
 
   hassfest:
     name: Hassfest

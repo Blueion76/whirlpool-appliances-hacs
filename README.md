@@ -93,6 +93,8 @@ This repository includes basic checks used in CI:
 - `ruff check .`
 - Home Assistant `hassfest`
 
+Ruff is currently scoped to the integration's config flow file in `pyproject.toml` as an incremental baseline for this repository.
+
 Optional local hooks:
 
 ```bash
