@@ -240,7 +240,7 @@ class WhirlpoolApkCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch account appliances and statuses."""
         try:
-            appliances = await self.client.get_appliances()
+            appliances = await self.client.list_appliances()
             self._latest_appliances = list(appliances)
             self._merge_thing_metadata()
             statuses: dict[str, Any] = {}
