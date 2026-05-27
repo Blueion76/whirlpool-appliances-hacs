@@ -46,9 +46,7 @@ OPTION_ACTIONS = {
 HISTORY_ACTIONS = {"cycle", "fault"}
 FAVORITE_ACTIONS = {"get", "delete"}
 MESSAGE_ACTIONS = {"list", "get", "dismiss"}
-FEATURE_ACTIONS = {
-    "update_appliances",
-    "get_ddm_content",
+ACCESSORY_ACTIONS = {
     "get_accessories",
     "get_accessory_status",
     "get_accessory_cycle_history",
@@ -62,6 +60,11 @@ FEATURE_ACTIONS = {
     "get_accessory_expert_cycle",
     "enable_accessory_range_extender",
     "get_accessory_ota_status",
+}
+FEATURE_ACTIONS = {
+    "update_appliances",
+    "get_ddm_content",
+    *ACCESSORY_ACTIONS,
     "get_notification_subscriptions",
     "get_notification_device",
     "get_ts_ota_status",
@@ -254,6 +257,15 @@ async def _feature_response(hass: HomeAssistant, call: ServiceCall) -> Any:
     action = str(call.data["action"])
     params = dict(call.data.get("params") or {}) or None
     body = call.data.get("body")
+
+    if action in ACCESSORY_ACTIONS and not _has_accessories(client):
+        return {
+            "status": "skipped",
+            "action": action,
+            "reason": "No accessories are reported by this Whirlpool account token.",
+            "accessories": [],
+        }
+
     accessory_headers = _accessory_headers(client)
 
     if action == "update_appliances":
@@ -317,6 +329,13 @@ async def _feature_response(hass: HomeAssistant, call: ServiceCall) -> Any:
             return {"video_capability_hints": _video_hints(result), "raw": result}
         return result
     raise HomeAssistantError(f"Unsupported feature action: {action}")
+
+
+def _has_accessories(client: WhirlpoolCloudClient) -> bool:
+    """Return true if the account token reports at least one accessory."""
+    auth_payload = getattr(client, "auth_payload", {}) or {}
+    accessories = auth_payload.get("accessories")
+    return isinstance(accessories, list) and len(accessories) > 0
 
 
 def _accessory_headers(client: WhirlpoolCloudClient) -> dict[str, str]:
