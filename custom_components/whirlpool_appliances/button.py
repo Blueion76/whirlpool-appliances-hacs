@@ -208,6 +208,10 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
             complete_action=str(options["complete_action"]),
             operation="4" if active else "2",
         )
+        time_attrs = {key: attrs.pop(key) for key in list(attrs) if key.endswith(("_TimeSetCookTimeSet", "_TimeSetDelayTime"))}
+        if time_attrs:
+            _LOGGER.debug("Applying Whirlpool oven time attributes before operation: said=%s cavity=%s attrs=%s", self.said, self.cavity, summarize(time_attrs))
+            self._check_service_request(await self.client.send_attributes(self.said, time_attrs))
         _LOGGER.debug("Final Whirlpool oven %s attributes: said=%s cavity=%s attrs=%s", "modify" if active else "start", self.said, self.cavity, summarize(attrs))
         return await self.client.send_attributes(self.said, attrs)
 
