@@ -152,9 +152,7 @@ oven_control:
           - stay_on
 appliance_option:
   name: Appliance option
-  target:
-    device:
-      integration: whirlpool_appliances
+  target: {}
   description: Grouped appliance option service for lights, quiet/remote, timers,
     time, firmware check, and AC filter actions.
   fields:
@@ -183,7 +181,7 @@ appliance_option:
       selector:
         boolean: null
     "on":
-      name: On
+      name: "On"
       required: false
       selector:
         boolean: null
