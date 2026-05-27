@@ -8,92 +8,100 @@ call_api:
       default: GET
       selector:
         select:
-          options: [GET, POST, PUT, PATCH, DELETE]
+          options:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
     path:
       name: Path
       required: true
       selector:
-        text:
+        text: null
     body:
       name: Body
       required: false
       selector:
-        object:
+        object: null
     params:
       name: Query parameters
       required: false
       selector:
-        object:
+        object: null
     auth:
       name: Send Authorization header
       required: false
       default: true
       selector:
-        boolean:
-
+        boolean: null
 send_appliance_command:
   name: Send appliance command
   description: Send a raw Whirlpool appliance command.
   fields:
-    appliance_device: &appliance_device_field
+    appliance_device: &id001
       name: Appliance device
       required: false
       selector:
         device:
           integration: whirlpool_appliances
-    said: &said_field
+    said: &id002
       name: SAID
       required: false
       selector:
-        text:
+        text: null
     command:
       name: Command
       required: false
       default: setAttributes
       selector:
-        text:
+        text: null
     attributes:
       name: Attributes
       required: false
       selector:
-        object:
+        object: null
     raw:
       name: Raw payload
       required: false
       selector:
-        object:
-
+        object: null
 set_attributes:
   name: Set appliance attributes
   description: Set raw legacy SAID attributes through the Whirlpool command endpoint.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     attributes:
       name: Attributes
       required: true
       selector:
-        object:
-
+        object: null
 oven_control:
   name: Oven control
-  description: Grouped oven action service for cooking, Frozen Bake, and stopping a cavity.
+  description: Grouped oven action service for cooking, Frozen Bake, and stopping
+    a cavity.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     action:
       name: Action
       required: true
       selector:
         select:
-          options: [set_cook, set_frozen_bake, stop]
+          options:
+          - set_cook
+          - set_frozen_bake
+          - stop
     cavity:
       name: Cavity
       required: false
       default: upper
       selector:
         select:
-          options: [upper, lower]
+          options:
+          - upper
+          - lower
     temperature:
       name: Temperature
       required: false
@@ -108,12 +116,12 @@ oven_control:
       required: false
       default: bake
       selector:
-        text:
+        text: null
     food:
       name: Food
       required: false
       selector:
-        text:
+        text: null
     cook_time_minutes:
       name: Cook time
       required: false
@@ -138,46 +146,49 @@ oven_control:
       default: turn_off
       selector:
         select:
-          options: [turn_off, keep_warm, stay_on]
-
+          options:
+          - turn_off
+          - keep_warm
+          - stay_on
 appliance_option:
   name: Appliance option
-  description: Grouped appliance option service for lights, quiet/remote, timers, time, firmware check, and AC filter actions.
+  description: Grouped appliance option service for lights, quiet/remote, timers,
+    time, firmware check, and AC filter actions.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     action:
       name: Action
       required: true
       selector:
         select:
           options:
-            - set_cavity_light
-            - set_quiet_mode
-            - set_remote_enable
-            - set_kitchen_timer
-            - stop_kitchen_timer
-            - check_firmware_update
-            - sync_time
-            - set_time_auto_update
-            - set_timezone
-            - get_ac_filter_status
-            - reset_ac_filter
+          - set_cavity_light
+          - set_quiet_mode
+          - set_remote_enable
+          - set_kitchen_timer
+          - stop_kitchen_timer
+          - check_firmware_update
+          - sync_time
+          - set_time_auto_update
+          - set_timezone
+          - get_ac_filter_status
+          - reset_ac_filter
     enabled:
       name: Enabled
       required: false
       selector:
-        boolean:
-    on:
-      name: On
+        boolean: null
+    true:
+      name: true
       required: false
       selector:
-        boolean:
+        boolean: null
     cavity:
       name: Cavity
       required: false
       selector:
-        text:
+        text: null
     seconds:
       name: Seconds
       required: false
@@ -201,13 +212,12 @@ appliance_option:
       required: false
       example: America/Chicago
       selector:
-        text:
+        text: null
     body:
       name: Body
       required: false
       selector:
-        object:
-
+        object: null
 refresh:
   name: Refresh Whirlpool data
   description: Refresh status data or force-refresh DDM capabilities.
@@ -218,20 +228,23 @@ refresh:
       default: status
       selector:
         select:
-          options: [status, ddm_capabilities]
-
+          options:
+          - status
+          - ddm_capabilities
 history:
   name: History
   description: Fetch cycle or fault history.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     action:
       name: Action
       required: true
       selector:
         select:
-          options: [cycle, fault]
+          options:
+          - cycle
+          - fault
     limit:
       name: Limit
       required: false
@@ -244,26 +257,26 @@ history:
       name: Query parameters
       required: false
       selector:
-        object:
-
+        object: null
 favorites:
   name: Favorites
   description: Fetch or delete appliance saved/favorite cycles.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     action:
       name: Action
       required: true
       selector:
         select:
-          options: [get, delete]
+          options:
+          - get
+          - delete
     favorite_id:
       name: Favorite ID
       required: false
       selector:
-        text:
-
+        text: null
 messages:
   name: Messages
   description: Fetch or dismiss Whirlpool account message-center messages.
@@ -273,191 +286,94 @@ messages:
       required: true
       selector:
         select:
-          options: [list, get, dismiss]
+          options:
+          - list
+          - get
+          - dismiss
     message_id:
       name: Message ID
       required: false
       selector:
-        text:
-
+        text: null
 feature:
   name: Feature
-  description: Grouped KitchenAid/Whirlpool feature service for DDM content, accessories, Scan2Cook, RMS/Yummly, TS OTA, documents, ThingShield state, live diagnostics, and video capability discovery.
+  description: Grouped feature service for DDM content, accessories, notifications,
+    TS OTA, documents, diagnostics, and video capability discovery.
   fields:
-    appliance_device: *appliance_device_field
-    said: *said_field
+    appliance_device: *id001
+    said: *id002
     action:
       name: Action
       required: true
       selector:
         select:
           options:
-            - update_appliances
-            - get_ddm_content
-            - get_accessories
-            - get_accessory_status
-            - get_accessory_cycle_history
-            - get_accessory_cycle
-            - get_accessory_cycle_lifecycle
-            - get_accessory_favorites
-            - save_accessory_cycle_favorite
-            - delete_accessory_favorite
-            - rename_accessory_favorite
-            - update_accessory_favorite_notes
-            - get_accessory_expert_cycle
-            - enable_accessory_range_extender
-            - get_accessory_ota_status
-            - discover_scan_to_cook_recipes
-            - search_recipe_by_upc
-            - get_scan_to_cook_categories
-            - get_scan_to_cook_category_recipes
-            - send_ioc_recipe
-            - cook_recipe
-            - manage_recipe
-            - get_rms_recipes
-            - get_rms_recipe
-            - get_rms_recipe_view
-            - get_rms_drinks
-            - get_rms_drink
-            - get_rms_userdata
-            - get_rms_userdata_item
-            - get_dam_assets
-            - product_autocomplete
-            - get_energy_providers
-            - get_smart_energy
-            - get_voice_enabled_appliances
-            - get_alexa_status
-            - get_alexa_fallback_urls
-            - get_share_accounts
-            - get_share_account
-            - get_shared_appliances
-            - get_invitations
-            - get_invitation_members
-            - get_notification_subscriptions
-            - get_notification_device
-            - get_opt_out_status
-            - set_opt_out_status
-            - get_marketing_material
-            - send_cycle_feedback
-            - get_feedback_feature_names
-            - get_auto_replenishment_registration
-            - get_auto_replenishment_account_registrations
-            - replenish_auto_replenishment_registration
-            - get_ts_ota_status
-            - get_ts_ota_descriptor_status
-            - get_ts_ota_descriptor
-            - get_appliance_documents
-            - get_thing_state
-            - live_collect
-            - get_video_capabilities
+          - update_appliances
+          - get_ddm_content
+          - get_accessories
+          - get_accessory_status
+          - get_accessory_cycle_history
+          - get_accessory_cycle
+          - get_accessory_cycle_lifecycle
+          - get_accessory_favorites
+          - save_accessory_cycle_favorite
+          - delete_accessory_favorite
+          - rename_accessory_favorite
+          - update_accessory_favorite_notes
+          - get_accessory_expert_cycle
+          - enable_accessory_range_extender
+          - get_accessory_ota_status
+          - get_notification_subscriptions
+          - get_notification_device
+          - get_ts_ota_status
+          - get_ts_ota_descriptor_status
+          - get_ts_ota_descriptor
+          - get_appliance_documents
+          - get_thing_state
+          - live_collect
+          - get_video_capabilities
     params:
       name: Query parameters
       required: false
       selector:
-        object:
+        object: null
     body:
       name: Body
       required: false
       selector:
-        object:
+        object: null
     ddm_key:
       name: DDM key
       required: false
       selector:
-        text:
+        text: null
     serial_number:
       name: Serial number
       required: false
       selector:
-        text:
+        text: null
     cycle_id:
       name: Cycle ID
       required: false
       selector:
-        text:
+        text: null
     favorite_id:
       name: Favorite ID
       required: false
       selector:
-        text:
+        text: null
     favorite_name:
       name: Favorite name
       required: false
       selector:
-        text:
+        text: null
     notes:
       name: Notes
       required: false
       selector:
-        text:
-    query:
-      name: Query
-      required: false
-      selector:
-        text:
-    upc:
-      name: UPC
-      required: false
-      selector:
-        text:
-    category:
-      name: Category
-      required: false
-      selector:
-        text:
-    recipe_id:
-      name: Recipe ID
-      required: false
-      selector:
-        text:
-    app:
-      name: RMS app
-      required: false
-      default: kitchenaid
-      selector:
-        text:
-    filter_name:
-      name: Filter name
-      required: false
-      selector:
-        text:
-    drink_id:
-      name: Drink ID
-      required: false
-      selector:
-        text:
-    userdata_id:
-      name: User data ID
-      required: false
-      selector:
-        text:
-    zip_code:
-      name: ZIP code
-      required: false
-      selector:
-        text:
-    location_id:
-      name: Location ID
-      required: false
-      selector:
-        text:
-    account_id:
-      name: Account ID
-      required: false
-      selector:
-        text:
+        text: null
     device_id:
       name: Device ID
       required: false
       selector:
-        text:
-    value:
-      name: Value
-      required: false
-      selector:
-        text:
-    share_request_id:
-      name: Share request ID
-      required: false
-      selector:
-        text:
+        text: null

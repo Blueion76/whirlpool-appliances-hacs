@@ -391,14 +391,7 @@ class WhirlpoolCloudClient:
             # required or optional.
             raise WhirlpoolAuthError(f"HTTP {resp.status}: {text[:500]}")
         if resp.status >= 400:
-            # Some discovery endpoints are optional fallbacks. A 404 from the
-            # ADRS registration endpoint is expected for many legacy accounts
-            # and should not spam HA warnings on every coordinator refresh.
-            log_method = _LOGGER.debug if (
-                resp.status == 404
-                and "/adrs/api/v2/registrations/accounts/" in str(resp.url.path)
-            ) else _LOGGER.warning
-            log_method(
+            _LOGGER.warning(
                 "Whirlpool API error response: status=%s url=%s body=%s",
                 resp.status,
                 resp.url.path,
@@ -483,7 +476,6 @@ class WhirlpoolCloudClient:
         if account_id:
             for path in (
                 f"/api/v3/appliance/all/account/{account_id}",
-                f"/adrs/api/v2/registrations/accounts/{account_id}",
             ):
                 try:
                     for item in _coerce_list(
