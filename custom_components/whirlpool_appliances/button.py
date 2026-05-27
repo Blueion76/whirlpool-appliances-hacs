@@ -211,9 +211,11 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
             cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")),
             delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
             complete_action=str(options["complete_action"]),
-            operation="4" if active else "2",
+            # User-confirmed value for idle remote-start/stage behavior: SetOnDisplay.
+            # Running changes still use Modify.
+            operation="4" if active else "3",
         )
-        _LOGGER.debug("Final Whirlpool oven %s attributes: said=%s cavity=%s attrs=%s", "modify" if active else "start", self.said, self.cavity, summarize(attrs))
+        _LOGGER.debug("Final Whirlpool oven %s attributes: said=%s cavity=%s attrs=%s", "modify" if active else "set_on_display", self.said, self.cavity, summarize(attrs))
         return await self.client.send_attributes(self.said, attrs)
 
 
