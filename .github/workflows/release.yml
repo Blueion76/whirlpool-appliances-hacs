@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "custom_components/whirlpool_appliances/manifest.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create_release:
+    name: Create GitHub Release from manifest version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version from manifest.json
+        id: manifest
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest_path = Path("custom_components/whirlpool_appliances/manifest.json")
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          version = manifest.get("version")
+          if not version or not isinstance(version, str):
+            raise SystemExit('manifest.json missing valid "version"')
+
+          tag = f"v{version.lstrip('v')}"
+          with open("$GITHUB_OUTPUT", "a", encoding="utf-8") as f:
+            f.write(f"version={version}\n")
+            f.write(f"tag={tag}\n")
+          PY
+
+      - name: Check whether tag already exists
+        id: tag_exists
+        run: |
+          if git rev-parse "${{ steps.manifest.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create tag
+        if: steps.tag_exists.outputs.exists != 'true'
+        run: |
+          git tag "${{ steps.manifest.outputs.tag }}"
+          git push origin "${{ steps.manifest.outputs.tag }}"
+
+      - name: Create GitHub Release
+        if: steps.tag_exists.outputs.exists != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.manifest.outputs.tag }}" \
+            --title "${{ steps.manifest.outputs.tag }}" \
+            --notes "Automated release for manifest version ${{ steps.manifest.outputs.version }}."
