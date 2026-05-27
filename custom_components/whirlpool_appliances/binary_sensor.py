@@ -303,5 +303,5 @@ class WhirlpoolApkBinarySensor(WhirlpoolApkEntity, BinarySensorEntity):
         if self.entity_description.key == "microwave_running":
             return "mdi:power-on" if self.is_on else "mdi:power-off"
         if self.entity_description.key.endswith("_door_locked"):
-            return "mdi:lock" if self.is_on else "mdi:lock-open-variant"
+            return "mdi:lock-open-variant" if self.is_on else "mdi:lock"
         return self.entity_description.icon
