@@ -91,6 +91,15 @@ def _temp_tenths_attr(name: str) -> Callable[[Mapping[str, Any]], float | None]:
     return value
 
 
+
+def _oven_temp_tenths_attr(name: str) -> Callable[[Mapping[str, Any]], float | None]:
+    """Return oven temp status values as native Fahrenheit."""
+    def value(flat: Mapping[str, Any]) -> float | None:
+        raw_value = _temp_tenths_attr(name)(flat)
+        return oven_status_temperature_to_fahrenheit(flat, raw_value)
+    return value
+
+
 def _attr_update_time(flat: Mapping[str, Any], attr: str) -> int | None:
     return _int_value(find_key(flat, (f"attributes.{attr}.updateTime", f"{attr}.updateTime", f"{attr}_updateTime")))
 
