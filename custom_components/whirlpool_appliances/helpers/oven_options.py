@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..entity import attr_value
+from .control import oven_status_temperature_to_fahrenheit
 
 OVEN_MODE_CODE_TO_SERVICE = {
     "2": "bake",
@@ -124,8 +125,8 @@ def current_oven_options(coordinator, said: str, cavity: str | None, flat: Mappi
 
     mode_code = str(attr_value(flat, f"{prefix}_CycleSetCommonMode") or "")
     mode = OVEN_MODE_CODE_TO_SERVICE.get(mode_code, "bake")
-    # Idle/default oven setpoint. Legacy oven temperature attrs are tenths of Fahrenheit.
-    target_temp = temp_from_tenths(attr_value(flat, f"{prefix}_CycleSetTargetTemp")) or 175
+    # Idle/default oven setpoint. Status is in the oven selected unit; local options store Fahrenheit.
+    target_temp = oven_status_temperature_to_fahrenheit(flat, temp_from_tenths(attr_value(flat, f"{prefix}_CycleSetTargetTemp"))) or 175
 
     action_code = str(attr_value(flat, f"{prefix}_OpSetCookTimeCompleteAction") or "3")
     complete_action = OVEN_COMPLETE_ACTION_CODE_TO_SERVICE.get(action_code, "turn_off")

@@ -21,6 +21,7 @@ from .helpers.control import (
     oven_is_active,
     raise_if_common_blocked,
     update_microwave_options,
+    oven_status_temperature_to_fahrenheit,
 )
 from .entity import (
     WhirlpoolApkEntity,
@@ -101,6 +102,7 @@ async def _send_oven_options(entity: WhirlpoolApkEntity, cavity: str, options: M
         delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
         complete_action=str(options["complete_action"]),
         operation="4" if active else "2",
+        flat_status=entity.flat_status,
     )
     _LOGGER.debug(
         "Applying Whirlpool oven attrs from number entity: entity=%s said=%s cavity=%s attrs=%s",
@@ -204,6 +206,7 @@ class WhirlpoolTargetTemperatureNumber(WhirlpoolApkEntity, WhirlpoolWholeNumberE
 
         if value is None and self.cavity in ("upper", "lower"):
             value = 175
+        value = oven_status_temperature_to_fahrenheit(self.flat_status, value)
         return round(float(value)) if value is not None else None
 
     async def async_set_native_value(self, value: float) -> None:

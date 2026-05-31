@@ -207,6 +207,7 @@ class WhirlpoolStartOvenButton(WhirlpoolApkButton):
             delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")),
             complete_action=str(options["complete_action"]),
             operation="4" if active else "2",
+            flat_status=self.flat_status,
         )
         time_attrs = {key: attrs.pop(key) for key in list(attrs) if key.endswith(("_TimeSetCookTimeSet", "_TimeSetDelayTime"))}
         if time_attrs:

@@ -144,7 +144,7 @@ async def _send_oven_options(entity: WhirlpoolApkEntity, cavity: str | None, opt
     raise_if_common_blocked(entity.flat_status, cavity=cavity)
     if active and frozen_or_custom_cycle(entity.flat_status, cavity):
         raise ServiceValidationError(translation_domain=DOMAIN, translation_key="modify_not_allowed")
-    attrs = oven_cook_attrs(cavity=cavity, temperature=float(options["target_temp"]), mode=str(options["mode"]), cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")), delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")), complete_action=str(options["complete_action"]), operation="4" if active else "2")
+    attrs = oven_cook_attrs(cavity=cavity, temperature=float(options["target_temp"]), mode=str(options["mode"]), cook_time_seconds=minutes_to_seconds(options.get("cook_time_minutes")), delay_time_seconds=minutes_to_seconds(options.get("delay_time_minutes")), complete_action=str(options["complete_action"]), operation="4" if active else "2", flat_status=entity.flat_status)
     entity._check_service_request(await entity.client.send_attributes(entity.said, attrs))
     await entity.coordinator.async_request_refresh()
 

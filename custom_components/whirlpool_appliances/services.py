@@ -11,6 +11,7 @@ from homeassistant.helpers import device_registry as dr
 
 from .api import WhirlpoolApiError, WhirlpoolCloudClient
 from .const import DATA_CLIENT, DATA_COORDINATOR, DOMAIN
+from .helpers.control import oven_cook_attrs
 
 
 # Keep the public service surface small and Home Assistant-like.  More specific
@@ -119,15 +120,17 @@ def register_services(hass: HomeAssistant) -> None:
         said = _service_said(hass, call)
         action = str(call.data["action"])
         if action == "set_cook":
-            result = await client.set_oven_cook(
-                said,
-                call.data["temperature"],
-                call.data.get("mode", "bake"),
-                call.data.get("cavity", "upper"),
+            cavity = call.data.get("cavity", "upper")
+            attrs = oven_cook_attrs(
+                cavity=cavity,
+                temperature=call.data["temperature"],
+                mode=call.data.get("mode", "bake"),
                 cook_time_seconds=_minutes_to_seconds(call.data.get("cook_time_minutes")),
                 delay_time_seconds=_minutes_to_seconds(call.data.get("delay_time_minutes")),
                 complete_action=call.data.get("complete_action", "turn_off"),
+                flat_status=_flat_status_for_said(hass, said),
             )
+            result = await client.send_attributes(said, attrs)
         elif action == "set_frozen_bake":
             result = await client.set_oven_frozen_bake(
                 said,
@@ -430,6 +433,18 @@ def _minutes_to_seconds(value: Any) -> int | None:
         return None
     minutes = float(value)
     return int(round(minutes * 60)) if minutes > 0 else None
+
+
+
+def _flat_status_for_said(hass: HomeAssistant, said: str) -> dict[str, Any]:
+    """Return coordinator flat status for an appliance SAID."""
+    coordinator = _first_coordinator(hass)
+    data = coordinator.data or {}
+    for appliance in data.get("appliances", []):
+        if str(appliance.get("_id") or appliance.get("SAID") or appliance.get("said") or "") == str(said):
+            from .entity import flatten
+            return flatten(appliance)
+    return {}
 
 
 def _history_params(hass: HomeAssistant, call: ServiceCall) -> dict[str, Any]:

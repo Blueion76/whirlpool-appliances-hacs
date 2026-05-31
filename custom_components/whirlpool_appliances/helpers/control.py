@@ -129,6 +129,54 @@ def cavity_prefix(cavity: str | None = None) -> str:
     return "OvenLowerCavity" if cavity == "lower" else "OvenUpperCavity"
 
 
+def oven_temperature_unit_is_celsius(flat: Mapping[str, Any] | None) -> bool:
+    """Return true when the oven display/command unit is currently Celsius.
+
+    Legacy cooking target-temperature commands use tenths of the oven's selected
+    display unit, not a fixed unit. Sys_DisplaySetTempUnits is 0 for Fahrenheit
+    and 1 for Celsius on the Minerva combo DDM.
+    """
+    if not isinstance(flat, Mapping):
+        return False
+    raw = attr_value(flat, "Sys_DisplaySetTempUnits")
+    if raw is None:
+        raw = attr_value(flat, "Sys_DisplaySetTemperatureUnits")
+    if raw is None:
+        raw = attr_value(flat, "Sys_DisplaySetTempUnit")
+    if raw is None:
+        return False
+    normalized = str(raw).strip().lower()
+    return normalized in {"1", "c", "celsius", "°c"}
+
+
+def fahrenheit_to_celsius(value: float) -> float:
+    """Convert Fahrenheit to Celsius."""
+    return (float(value) - 32) * 5 / 9
+
+
+def celsius_to_fahrenheit(value: float) -> float:
+    """Convert Celsius to Fahrenheit."""
+    return float(value) * 9 / 5 + 32
+
+
+def oven_command_temperature_from_fahrenheit(flat: Mapping[str, Any] | None, fahrenheit: float) -> float:
+    """Convert an HA/native Fahrenheit oven target to the oven command unit."""
+    return fahrenheit_to_celsius(float(fahrenheit)) if oven_temperature_unit_is_celsius(flat) else float(fahrenheit)
+
+
+def oven_status_temperature_to_fahrenheit(flat: Mapping[str, Any] | None, value: float | None) -> float | None:
+    """Convert an oven status target/display temp to Fahrenheit.
+
+    Oven target/display status values are reported in the oven's selected
+    display unit. The HA oven number control remains native Fahrenheit so it can
+    round/step correctly and so 300°F does not become 149°F on Fahrenheit-mode
+    ovens.
+    """
+    if value is None:
+        return None
+    return celsius_to_fahrenheit(float(value)) if oven_temperature_unit_is_celsius(flat) else float(value)
+
+
 def oven_is_active(flat: Mapping[str, Any], cavity: str | None = None) -> bool:
     """Return true when an oven cavity is preheating/cooking."""
     return str(attr_value(flat, f"{cavity_prefix(cavity)}_OpStatusState") or "") in {"1", "2"}
@@ -188,8 +236,14 @@ def oven_cook_attrs(
     delay_time_seconds: int | None = None,
     complete_action: str = "turn_off",
     operation: str = "2",
+    flat_status: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
-    """Build a legacy oven start/modify payload.\n\n    The legacy cooking command expects target temperature as tenths of\n    Fahrenheit for oven cavities.\n    """
+    """Build a legacy oven start/modify payload.
+
+    ``temperature`` is Fahrenheit from HA/local options. The Whirlpool legacy
+    oven command expects tenths of the oven's current display unit, so convert
+    to Celsius only when Sys_DisplaySetTempUnits says the appliance is in °C.
+    """
     prefix = cavity_prefix(cavity)
     selected = OVEN_MODE_SERVICE_TO_CODE.get(str(mode).lower())
     if selected is None:
@@ -198,9 +252,10 @@ def oven_cook_attrs(
     if complete is None:
         raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_value_set")
 
+    command_temp = oven_command_temperature_from_fahrenheit(flat_status, float(temperature))
     attrs: dict[str, str] = {
         f"{prefix}_CycleSetCommonMode": selected,
-        f"{prefix}_CycleSetTargetTemp": str(int(round(float(temperature) * 10))),
+        f"{prefix}_CycleSetTargetTemp": str(int(round(command_temp * 10))),
         f"{prefix}_OpSetCookTimeCompleteAction": complete,
         f"{prefix}_OpSetOperations": operation,
     }
